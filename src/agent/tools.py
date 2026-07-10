@@ -34,7 +34,7 @@ def calculate_emi(principal: float, rate_pa: float, tenure_months: int) -> str:
         total_interest = total_amount - principal
         
         # --- UPGRADE: Generate Yearly Amortization Schedule ---
-        schedule = "\n\n**Yearly Amortization Schedule:**\n"
+        schedule = "\n\n### 📊 Yearly Amortization Schedule\n"
         schedule += "| Year | Principal Paid | Interest Paid | Ending Balance |\n"
         schedule += "|------|----------------|---------------|----------------|\n"
         
@@ -53,21 +53,22 @@ def calculate_emi(principal: float, rate_pa: float, tenure_months: int) -> str:
             # Append to schedule at the end of each year or the final month
             if month % 12 == 0 or month == tenure_months:
                 year = month // 12 if month % 12 == 0 else (month // 12) + 1
-                schedule += f"| Year {year} | Rs. {yearly_principal:,.2f} | Rs. {yearly_interest:,.2f} | Rs. {max(0, balance):,.2f} |\n"
-                # Reset yearly counters
+                # Format numbers with commas and 2 decimal places for a professional look
+                schedule += f"| Year {year} | ₹ {yearly_principal:,.2f} | ₹ {yearly_interest:,.2f} | ₹ {max(0, balance):,.2f} |\n"
+                
+                # Reset yearly counters for the next loop
                 yearly_principal = 0
                 yearly_interest = 0
         
-        # We return the raw calculation cleanly back to the LLM
-        return (f"Calculation Successful.\n"
-                f"Monthly EMI: Rs. {emi:,.2f}\n"
-                f"Total Interest Payable: Rs. {total_interest:,.2f}\n"
-                f"Total Amount to be Paid: Rs. {total_amount:,.2f}"
+        # Return the clean, calculated data back to the LLM context
+        return (f"**Calculation Successful:**\n"
+                f"- **Monthly EMI:** ₹ {emi:,.2f}\n"
+                f"- **Total Interest Payable:** ₹ {total_interest:,.2f}\n"
+                f"- **Total Amount to be Paid:** ₹ {total_amount:,.2f}\n"
                 f"{schedule}")
                 
     except Exception as e:
         return f"Error calculating EMI: {str(e)}"
 
 # A list of all tools our agent is allowed to use.
-# We will bind this list to Qwen2.5-Coder in the next phase.
 AGENT_TOOLS = [search_loan_policies, calculate_emi]

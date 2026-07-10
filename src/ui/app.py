@@ -4,7 +4,6 @@ from langchain_core.messages import HumanMessage, AIMessage
 # Import our compiled LangGraph agent
 from src.agent.graph import app
 
-# 1. Page Configuration
 st.set_page_config(
     page_title="AI Loan Advisory Agent",
     page_icon="🏦",
@@ -12,7 +11,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. Sidebar for System Architecture Info
+# Custom CSS for a slightly polished look
+st.markdown("""
+<style>
+    .stChatMessage { border-radius: 10px; padding: 15px; margin-bottom: 10px; }
+    .stChatInput { padding-bottom: 20px; }
+</style>
+""", unsafe_allow_html=True)
+
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2830/2830284.png", width=100) # Placeholder bank icon
     st.header("System Architecture")
@@ -20,28 +26,27 @@ with st.sidebar:
     **Local Agentic RAG**
     * **LLM:** `Qwen-2.5-Coder:7b`
     * **Embeddings:** `Nomic-Embed-Text`
-    * **Vector DB:** `ChromaDB`
+    * **Vector DB:** `ChromaDB (k=5)`
     * **Orchestrator:** `LangGraph`
     
     **Available Capabilities:**
     1. 📚 Read Policy Documents
     2. 🧮 Calculate EMI Math
-    3. 💬 General Conversational Fallback
+    3. 🧠 Contextual Deductions
     """)
     st.divider()
-    if st.button("Clear Conversation History"):
+    if st.button("Clear Conversation History", type="primary", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
-# 3. Main UI Header
 st.title("🏦 AI-Powered Loan Advisory Agent")
-st.markdown("Ask me anything about loan eligibility, policies, interest rates, or EMI calculations based on internal bank documents.")
+st.markdown("Ask me anything about loan eligibility, policies, interest rates, or EMI calculations. I fetch verified data from our internal policies.")
 
-# 4. Initialize Chat History in Streamlit Session State
+# Initialize Chat History in Streamlit Session State
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# 5. Display existing chat messages
+# Display existing chat messages
 for msg in st.session_state.messages:
     # Determine the role for the UI icon
     role = "user" if isinstance(msg, HumanMessage) else "assistant"
@@ -51,25 +56,25 @@ for msg in st.session_state.messages:
         with st.chat_message(role):
             st.write(msg.content)
 
-# --- UPGRADE: Quick Starter Prompts ---
-prompt = st.chat_input("E.g., What is the minimum income for an SBI Personal Loan?")
+prompt = st.chat_input("E.g., What is the minimum income for a Home Loan?", key="chat_input")
 
+# Quick Starter Prompts (Only show if conversation is empty)
 if not st.session_state.messages:
-    st.info("👋 Welcome! You can ask me to calculate EMIs, check eligibility, or explain banking fees.")
+    st.info("👋 Welcome! Try asking one of the common queries below:")
     suggestion = st.pills(
-        "Try asking:", 
+        "Starter queries:", 
         [
             "What is the eligibility for a home loan?", 
             "Calculate EMI for a 20 Lakh loan at 8.5% for 5 years", 
-            "What are the pre-closure charges for personal loans?"
-        ]
+            "Can a college student get a personal loan?"
+        ],
+        label_visibility="collapsed"
     )
-    if suggestion:
+    # If the user clicks a pill and hasn't typed anything else, use the pill text
+    if suggestion and not prompt:
         prompt = suggestion
 
-# 6. Handle New User Input
 if prompt:
-    
     # Render user message
     with st.chat_message("user"):
         st.write(prompt)
@@ -80,7 +85,7 @@ if prompt:
     # Generate and render AI response
     with st.chat_message("assistant"):
         # A temporary spinner while the graph executes
-        with st.spinner("Agent is thinking..."):
+        with st.spinner("Agent is retrieving documents and reasoning..."):
             
             state = {"messages": st.session_state.messages}
             thought_process = []
@@ -90,7 +95,7 @@ if prompt:
                 latest_msg = event["messages"][-1]
                 
                 # Capture tool calls to display in the UI as the "thought process"
-                if latest_msg.type == "ai" and latest_msg.tool_calls:
+                if latest_msg.type == "ai" and getattr(latest_msg, "tool_calls", None):
                     for tool in latest_msg.tool_calls:
                         thought_process.append(
                             f"🛠️ **Agent routed to:** `{tool['name']}`\n"

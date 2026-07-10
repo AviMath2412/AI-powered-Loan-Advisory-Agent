@@ -1,15 +1,13 @@
 import json
-import uuid
+from langchain_core.messages import SystemMessage
+from langchain_ollama import ChatOllama
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode, tools_condition
-from langchain_ollama import ChatOllama
-from langchain_core.messages import SystemMessage
 
 from src.agent.state import AgentState
 from src.agent.tools import AGENT_TOOLS
 from src.config import LLM_MODEL, OLLAMA_BASE_URL
 
-# 1. Initialize the LLM and bind our specific tools to it
 # Temperature is set to 0 to prevent the LLM from hallucinating financial figures
 llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0)
 llm_with_tools = llm.bind_tools(AGENT_TOOLS)
@@ -26,7 +24,6 @@ CRITICAL RULES:
 5. Be polite, concise, and use markdown formatting (bullet points, bold text) to structure your answers beautifully.
 """
 
-# 2. Define the Agent Node
 def chatbot(state: AgentState):
     """
     This is the core reasoning node. It takes the conversation history,
@@ -35,7 +32,7 @@ def chatbot(state: AgentState):
     messages = state["messages"]
     sys_msg = SystemMessage(content=SYSTEM_PROMPT)
     
-    # We pass the system message + the entire conversation history to the LLM
+    # Pass the system message + the entire conversation history to the LLM
     response = llm_with_tools.invoke([sys_msg] + messages)
     
     # --- PRODUCTION GUARDRAIL: Local LLM JSON Fallback ---
@@ -57,7 +54,6 @@ def chatbot(state: AgentState):
     
     return {"messages": [response]}
 
-# 3. Build the LangGraph State Machine
 workflow = StateGraph(AgentState)
 
 # Add the nodes (the "actors" in our graph)
@@ -70,10 +66,7 @@ workflow.set_entry_point("agent")
 # Add conditional routing:
 # After the agent thinks, 'tools_condition' checks if the LLM decided to use a tool.
 # If yes -> route to 'tools' node. If no -> route to END (it finished answering).
-workflow.add_conditional_edges(
-    "agent",
-    tools_condition,
-)
+workflow.add_conditional_edges("agent", tools_condition)
 
 # If it went to the 'tools' node, it MUST go back to the 'agent' node 
 # so the LLM can read the tool's output and format a natural response.

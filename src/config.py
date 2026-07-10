@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 
-# Resolves the absolute path to the root of the project (final_project)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Data Paths
@@ -20,7 +19,7 @@ CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
 RETRIEVER_K = 5
 
-# Ensure directories exist
+# Ensure directories exist upon startup
 os.makedirs(RAW_PDF_DIR, exist_ok=True)
 os.makedirs(PROCESSED_TEXT_DIR, exist_ok=True)
 os.makedirs(CHROMA_DB_DIR, exist_ok=True)
