@@ -1,122 +1,107 @@
-# 🏦 AI-Powered Loan Advisory Agent (Local Agentic RAG)
+# AI-Powered Loan Advisory Agent
 
-An intelligent, local agentic RAG application built to assist users with bank loan policies, interest rates, eligibility criteria, and monthly loan payment calculations. It leverages local open-source LLMs and embeddings via **Ollama**, orchestrates tasks using **LangGraph**, and offers both a terminal interface and a modern **Streamlit Web UI**.
-
----
-
-## 🌟 Key Features
-
-* **📚 Contextual Policy Ingestion & Search:** Automatically parses raw PDF documents (interest rates, terms and conditions, eligibility guidelines) into text chunks, embeds them, and queries the local Chroma vector database with top-k retrieval ($k=5$).
-* **🧮 Smart EMI Math Tool:** Dynamically calculates Equated Monthly Installments (EMI), total interest, and total payable amount. Generates a formatted **Yearly Amortization Schedule** table.
-* **🧠 Agentic Reasoning with LangGraph:** Uses state-machine routing to intelligently select between search, calculation, or conversational responses. Includes contextual deduction capabilities to reason about profiles not explicitly listed (e.g. students or freelancers) using general eligibility limits.
-* **🛡️ Production Guardrails:** Features a custom local LLM JSON fallback parser that catches and processes raw JSON tool outputs to ensure reliable execution on consumer-grade local LLMs.
-* **💻 Dual Interface:**
-  * **Interactive CLI:** Run queries directly from your shell terminal.
-  * **Beautiful Web UI:** A sleek chat interface with interactive starter prompts, a visual agent thought-process inspector, and side-by-side architecture stats.
+A local, production-grade Multi-Agent RAG (Retrieval-Augmented Generation) system built entirely from scratch—from raw banking policy document collection and text preprocessing to vector space indexing, state-machine orchestration, and interactive web dashboard execution.
 
 ---
 
-## 🛠️ Technology Stack
+## Architectural Workflow
 
-| Component | Technology | Description |
-| :--- | :--- | :--- |
-| **LLM** | `Qwen-2.5-Coder:7b` | Running locally via Ollama (configured with Temperature = 0 for strict calculations) |
-| **Embeddings** | `Nomic-Embed-Text` | Local embedding model generating high-quality context vectors |
-| **Vector Database** | `ChromaDB` | Embedded vector database with metadata-aware document storage |
-| **Orchestration** | `LangGraph` & `LangChain` | Handles agent state, conditional edges, and structured tool routing |
-| **Web Dashboard** | `Streamlit` | Frontend web interface with chat interface and custom themes |
+The application operates as a stateful multi-agent system orchestrated using **LangGraph**. Below is the flow of execution for a single user query:
 
----
-
-## 📂 Project Structure
-
-```text
-final_project/
-├── data/
-│   ├── raw_pdfs/            # Put your raw loan policy PDF documents here
-│   ├── processed_text/      # Extracted clean text files
-│   └── chroma_db/           # Local ChromaDB vector database index files
-├── src/
-│   ├── agent/
-│   │   ├── state.py         # Defines LangGraph state schema
-│   │   ├── tools.py         # Retrieval and EMI calculation tools
-│   │   └── graph.py         # Agent node definitions and graph compilation
-│   ├── ingestion/
-│   │   ├── pdf_extractor.py # Extracts & cleans text from raw PDFs
-│   │   └── vector_builder.py# Chunks text, generates embeddings, builds vector DB
-│   ├── rag/
-│   │   └── retriever.py     # Database retrieval and context-formatting logic
-│   ├── ui/
-│   │   └── app.py           # Streamlit web dashboard application
-│   └── config.py            # Global project configurations
-├── requirements.txt         # Project dependencies
-├── main.py                  # CLI Terminal interface for the agent
-└── README.md                # Project documentation
+```mermaid
+graph TD
+    Start([User Input]) --> Planner[1. Planner Node]
+    Planner --> Researcher[2. Researcher Node]
+    Researcher --> Calculator[3. Calculator Node]
+    Calculator --> Credit[4. Credit Checker Node]
+    Credit --> Critic[5. Critic Node]
+    
+    Critic -->|Verdict: sufficient| Synthesizer[6. Synthesizer Node]
+    Critic -->|Verdict: retry / rewrite query| Researcher
+    
+    Synthesizer --> End([Polished Markdown Response])
 ```
 
+### Agent Node Breakdown
+
+* **Planner:** Evaluates the user input against the conversation history and updates the user profile. Determines which capabilities (database search, math calculation, credit score checking) are needed and extracts parameters.
+* **Researcher:** Executes vector database searches over internal policy documents.
+* **Calculator:** Performs mathematical calculations (monthly EMI and yearly amortization schedules) deterministically.
+* **Credit Checker:** Simulated credit checking agent to simulate financial profile ratings.
+* **Critic:** Evaluates if the research evidence is sufficient and on-topic. If not, it rewrites the query and triggers a retry loop (capped at a maximum of 2 retries).
+* **Synthesizer:** Formulates a clear, professional, and formatted response grounded strictly in the gathered evidence.
+
 ---
 
-## 🚀 Getting Started
+## Core Technical Features
 
-### 1. Install & Set Up Ollama
-1. Download and install **Ollama** from [ollama.com](https://ollama.ai/).
-2. Pull the required models:
-   ```bash
-   ollama pull qwen2.5-coder:7b
-   ollama pull nomic-embed-text:latest
-   ```
+* **End-to-End Ingestion Pipeline:** Custom text processing script that parses raw banking PDFs, cleans layouts, and extracts structured text.
+* **Vector Indexing & Retrieval:** Text splits are indexed into a local ChromaDB database utilizing `Nomic-Embed-Text` embeddings. Search query retrieval is configured with $k=5$ for comprehensive context matching.
+* **Stateful Conversation Memory:** Uses a persistent SQLite checkpointer (`SqliteSaver`) to maintain chat states, user profiles, and conversation threads across app updates and server restarts.
+* **Robust JSON Guardrails:** Integrates custom fallback parsing to intercept and format raw JSON output structures produced by local LLMs, mapping them directly to LangGraph execution blocks.
+* **Deterministic Mathematical Engine:** Calculates loan interest and principal schedules programmatically, avoiding LLM hallucinations for amortization statistics.
 
-### 2. Set Up Virtual Environment & Dependencies
-Create a Python virtual environment and install the required libraries:
+---
+
+## Technical Specifications
+
+| Component | Choice | Configuration |
+| :--- | :--- | :--- |
+| **Orchestrator** | LangGraph / LangChain | Multi-agent state graph with SQLite persistence |
+| **Language Model** | Qwen-2.5-Coder:7b | Local execution via Ollama (Temperature = 0) |
+| **Embeddings** | Nomic-Embed-Text | Local embedding model via Ollama |
+| **Vector DB** | ChromaDB | Local file-system vector store ($k=5$) |
+| **Frontend** | Streamlit | Chat interface with live execution traces and interactive charts |
+
+---
+
+## Getting Started
+
+### 1. Model Setup
+Install Ollama and pull the models locally:
 ```bash
-# Create virtual environment
-python3 -m venv venv
+# Pull the reasoning engine
+ollama pull qwen2.5-coder:7b
 
-# Activate virtual environment
+# Pull the embedding engine
+ollama pull nomic-embed-text:latest
+```
+
+### 2. Environment Setup
+Set up the Python virtual environment and install the required dependencies:
+```bash
+# Create and activate virtual environment
+python3 -m venv venv
 source venv/bin/activate
 
-# Install dependencies
+# Install requirements
 pip install -r requirements.txt
 ```
 
-### 3. Ingest PDF Documents & Build Vector DB
-1. Place any loan policy PDFs you want to use into the `data/raw_pdfs/` directory.
+### 3. Pipeline Ingestion (From Raw Data to Vector DB)
+1. Place raw banking policy PDFs in `data/raw_pdfs/`.
 2. Extract text from the PDFs:
    ```bash
    python src/ingestion/pdf_extractor.py
    ```
-3. Generate embeddings and build the Chroma database:
+3. Index the texts into the vector database:
    ```bash
    python src/ingestion/vector_builder.py
    ```
 
 ---
 
-## 🖥️ Running the Application
+## Execution
 
-### Option A: Interactive CLI Terminal Interface
-Execute the following command to talk to the agent directly in your command line:
+### CLI Terminal Interface
+Interact with the agent directly inside your terminal session:
 ```bash
 python main.py
 ```
 
-### Option B: Streamlit Web Dashboard
-Run the web application as a module (to automatically resolve dependencies):
+### Streamlit Web Dashboard
+Launch the web interface (to serve the application locally):
 ```bash
 python -m streamlit run src/ui/app.py
 ```
-Open your browser and navigate to **`http://localhost:8501`** (or the port shown in your terminal).
-
----
-
-## 📝 Example Queries to Try
-
-1. **Policy Queries:**
-   * *"What is the eligibility for an SBI Personal Loan?"*
-   * *"What are the pre-closure charges for home loans?"*
-2. **EMI Calculations:**
-   * *"Calculate the EMI for a 15 Lakh loan at 9.5% for 60 months."*
-   * *"Show me the yearly amortization schedule for 20 Lakhs at 8.5% for 5 years."*
-3. **Contextual Inference:**
-   * *"Can a college student get a personal loan?"*
-   * *"Can a freelancer apply for a car loan?"*
+Open your browser and navigate to the address displayed in the terminal console (typically `http://localhost:8501`).

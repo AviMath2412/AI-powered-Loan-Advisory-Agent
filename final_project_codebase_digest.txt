@@ -70,6 +70,7 @@ Directory Structure:
     │                           ├── dracula.toml
     │                           ├── ubuntu.toml
     │                           └── nord.toml
+    ├── README.md
     ├── .env
     ├── main.py
     ├── data
@@ -119,12 +120,12 @@ Directory Structure:
             └── __init__.py
 
 Summary:
-Total files analyzed: 89
+Total files analyzed: 90
 Total directories analyzed: 26
-Estimated output size: 758.69 KB
-Actual analyzed size: 16409.99 KB
-Total tokens: 380612
-Actual text content size: 811.92 KB
+Estimated output size: 764.25 KB
+Actual analyzed size: 16415.45 KB
+Total tokens: 381898
+Actual text content size: 817.17 KB
 
 File Contents:
 
@@ -8864,6 +8865,133 @@ borderColor = "#4c566a"
 
 
 ==================================================
+File: final_project/README.md
+==================================================
+# 🏦 AI-Powered Loan Advisory Agent (Local Agentic RAG)
+
+An intelligent, local agentic RAG application built to assist users with bank loan policies, interest rates, eligibility criteria, and monthly loan payment calculations. It leverages local open-source LLMs and embeddings via **Ollama**, orchestrates tasks using **LangGraph**, and offers both a terminal interface and a modern **Streamlit Web UI**.
+
+---
+
+## 🌟 Key Features
+
+* **📚 Contextual Policy Ingestion & Search:** Automatically parses raw PDF documents (interest rates, terms and conditions, eligibility guidelines) into text chunks, embeds them, and queries the local Chroma vector database with top-k retrieval ($k=5$).
+* **🧮 Smart EMI Math Tool:** Dynamically calculates Equated Monthly Installments (EMI), total interest, and total payable amount. Generates a formatted **Yearly Amortization Schedule** table.
+* **🧠 Agentic Reasoning with LangGraph:** Uses state-machine routing to intelligently select between search, calculation, or conversational responses. Includes contextual deduction capabilities to reason about profiles not explicitly listed (e.g. students or freelancers) using general eligibility limits.
+* **🛡️ Production Guardrails:** Features a custom local LLM JSON fallback parser that catches and processes raw JSON tool outputs to ensure reliable execution on consumer-grade local LLMs.
+* **💻 Dual Interface:**
+  * **Interactive CLI:** Run queries directly from your shell terminal.
+  * **Beautiful Web UI:** A sleek chat interface with interactive starter prompts, a visual agent thought-process inspector, and side-by-side architecture stats.
+
+---
+
+## 🛠️ Technology Stack
+
+| Component | Technology | Description |
+| :--- | :--- | :--- |
+| **LLM** | `Qwen-2.5-Coder:7b` | Running locally via Ollama (configured with Temperature = 0 for strict calculations) |
+| **Embeddings** | `Nomic-Embed-Text` | Local embedding model generating high-quality context vectors |
+| **Vector Database** | `ChromaDB` | Embedded vector database with metadata-aware document storage |
+| **Orchestration** | `LangGraph` & `LangChain` | Handles agent state, conditional edges, and structured tool routing |
+| **Web Dashboard** | `Streamlit` | Frontend web interface with chat interface and custom themes |
+
+---
+
+## 📂 Project Structure
+
+```text
+final_project/
+├── data/
+│   ├── raw_pdfs/            # Put your raw loan policy PDF documents here
+│   ├── processed_text/      # Extracted clean text files
+│   └── chroma_db/           # Local ChromaDB vector database index files
+├── src/
+│   ├── agent/
+│   │   ├── state.py         # Defines LangGraph state schema
+│   │   ├── tools.py         # Retrieval and EMI calculation tools
+│   │   └── graph.py         # Agent node definitions and graph compilation
+│   ├── ingestion/
+│   │   ├── pdf_extractor.py # Extracts & cleans text from raw PDFs
+│   │   └── vector_builder.py# Chunks text, generates embeddings, builds vector DB
+│   ├── rag/
+│   │   └── retriever.py     # Database retrieval and context-formatting logic
+│   ├── ui/
+│   │   └── app.py           # Streamlit web dashboard application
+│   └── config.py            # Global project configurations
+├── requirements.txt         # Project dependencies
+├── main.py                  # CLI Terminal interface for the agent
+└── README.md                # Project documentation
+```
+
+---
+
+## 🚀 Getting Started
+
+### 1. Install & Set Up Ollama
+1. Download and install **Ollama** from [ollama.com](https://ollama.ai/).
+2. Pull the required models:
+   ```bash
+   ollama pull qwen2.5-coder:7b
+   ollama pull nomic-embed-text:latest
+   ```
+
+### 2. Set Up Virtual Environment & Dependencies
+Create a Python virtual environment and install the required libraries:
+```bash
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 3. Ingest PDF Documents & Build Vector DB
+1. Place any loan policy PDFs you want to use into the `data/raw_pdfs/` directory.
+2. Extract text from the PDFs:
+   ```bash
+   python src/ingestion/pdf_extractor.py
+   ```
+3. Generate embeddings and build the Chroma database:
+   ```bash
+   python src/ingestion/vector_builder.py
+   ```
+
+---
+
+## 🖥️ Running the Application
+
+### Option A: Interactive CLI Terminal Interface
+Execute the following command to talk to the agent directly in your command line:
+```bash
+python main.py
+```
+
+### Option B: Streamlit Web Dashboard
+Run the web application as a module (to automatically resolve dependencies):
+```bash
+python -m streamlit run src/ui/app.py
+```
+Open your browser and navigate to **`http://localhost:8501`** (or the port shown in your terminal).
+
+---
+
+## 📝 Example Queries to Try
+
+1. **Policy Queries:**
+   * *"What is the eligibility for an SBI Personal Loan?"*
+   * *"What are the pre-closure charges for home loans?"*
+2. **EMI Calculations:**
+   * *"Calculate the EMI for a 15 Lakh loan at 9.5% for 60 months."*
+   * *"Show me the yearly amortization schedule for 20 Lakhs at 8.5% for 5 years."*
+3. **Contextual Inference:**
+   * *"Can a college student get a personal loan?"*
+   * *"Can a freelancer apply for a car loan?"*
+
+
+==================================================
 File: final_project/.env
 ==================================================
 
@@ -14517,7 +14645,6 @@ from langchain_core.messages import HumanMessage, AIMessage
 # Import our compiled LangGraph agent
 from src.agent.graph import app
 
-# 1. Page Configuration
 st.set_page_config(
     page_title="AI Loan Advisory Agent",
     page_icon="🏦",
@@ -14525,7 +14652,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. Sidebar for System Architecture Info
+# Custom CSS for a slightly polished look
+st.markdown("""
+<style>
+    .stChatMessage { border-radius: 10px; padding: 15px; margin-bottom: 10px; }
+    .stChatInput { padding-bottom: 20px; }
+</style>
+""", unsafe_allow_html=True)
+
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2830/2830284.png", width=100) # Placeholder bank icon
     st.header("System Architecture")
@@ -14533,28 +14667,27 @@ with st.sidebar:
     **Local Agentic RAG**
     * **LLM:** `Qwen-2.5-Coder:7b`
     * **Embeddings:** `Nomic-Embed-Text`
-    * **Vector DB:** `ChromaDB`
+    * **Vector DB:** `ChromaDB (k=5)`
     * **Orchestrator:** `LangGraph`
     
     **Available Capabilities:**
     1. 📚 Read Policy Documents
     2. 🧮 Calculate EMI Math
-    3. 💬 General Conversational Fallback
+    3. 🧠 Contextual Deductions
     """)
     st.divider()
-    if st.button("Clear Conversation History"):
+    if st.button("Clear Conversation History", type="primary", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
-# 3. Main UI Header
 st.title("🏦 AI-Powered Loan Advisory Agent")
-st.markdown("Ask me anything about loan eligibility, policies, interest rates, or EMI calculations based on internal bank documents.")
+st.markdown("Ask me anything about loan eligibility, policies, interest rates, or EMI calculations. I fetch verified data from our internal policies.")
 
-# 4. Initialize Chat History in Streamlit Session State
+# Initialize Chat History in Streamlit Session State
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# 5. Display existing chat messages
+# Display existing chat messages
 for msg in st.session_state.messages:
     # Determine the role for the UI icon
     role = "user" if isinstance(msg, HumanMessage) else "assistant"
@@ -14564,25 +14697,25 @@ for msg in st.session_state.messages:
         with st.chat_message(role):
             st.write(msg.content)
 
-# --- UPGRADE: Quick Starter Prompts ---
-prompt = st.chat_input("E.g., What is the minimum income for an SBI Personal Loan?")
+prompt = st.chat_input("E.g., What is the minimum income for a Home Loan?", key="chat_input")
 
+# Quick Starter Prompts (Only show if conversation is empty)
 if not st.session_state.messages:
-    st.info("👋 Welcome! You can ask me to calculate EMIs, check eligibility, or explain banking fees.")
+    st.info("👋 Welcome! Try asking one of the common queries below:")
     suggestion = st.pills(
-        "Try asking:", 
+        "Starter queries:", 
         [
             "What is the eligibility for a home loan?", 
             "Calculate EMI for a 20 Lakh loan at 8.5% for 5 years", 
-            "What are the pre-closure charges for personal loans?"
-        ]
+            "Can a college student get a personal loan?"
+        ],
+        label_visibility="collapsed"
     )
-    if suggestion:
+    # If the user clicks a pill and hasn't typed anything else, use the pill text
+    if suggestion and not prompt:
         prompt = suggestion
 
-# 6. Handle New User Input
 if prompt:
-    
     # Render user message
     with st.chat_message("user"):
         st.write(prompt)
@@ -14593,7 +14726,7 @@ if prompt:
     # Generate and render AI response
     with st.chat_message("assistant"):
         # A temporary spinner while the graph executes
-        with st.spinner("Agent is thinking..."):
+        with st.spinner("Agent is retrieving documents and reasoning..."):
             
             state = {"messages": st.session_state.messages}
             thought_process = []
@@ -14603,7 +14736,7 @@ if prompt:
                 latest_msg = event["messages"][-1]
                 
                 # Capture tool calls to display in the UI as the "thought process"
-                if latest_msg.type == "ai" and latest_msg.tool_calls:
+                if latest_msg.type == "ai" and getattr(latest_msg, "tool_calls", None):
                     for tool in latest_msg.tool_calls:
                         thought_process.append(
                             f"🛠️ **Agent routed to:** `{tool['name']}`\n"
@@ -14798,7 +14931,6 @@ File: final_project/src/config.py
 import os
 from pathlib import Path
 
-# Resolves the absolute path to the root of the project (final_project)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Data Paths
@@ -14817,7 +14949,7 @@ CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
 RETRIEVER_K = 5
 
-# Ensure directories exist
+# Ensure directories exist upon startup
 os.makedirs(RAW_PDF_DIR, exist_ok=True)
 os.makedirs(PROCESSED_TEXT_DIR, exist_ok=True)
 os.makedirs(CHROMA_DB_DIR, exist_ok=True)
@@ -14866,7 +14998,7 @@ def calculate_emi(principal: float, rate_pa: float, tenure_months: int) -> str:
         total_interest = total_amount - principal
         
         # --- UPGRADE: Generate Yearly Amortization Schedule ---
-        schedule = "\n\n**Yearly Amortization Schedule:**\n"
+        schedule = "\n\n### 📊 Yearly Amortization Schedule\n"
         schedule += "| Year | Principal Paid | Interest Paid | Ending Balance |\n"
         schedule += "|------|----------------|---------------|----------------|\n"
         
@@ -14885,40 +15017,39 @@ def calculate_emi(principal: float, rate_pa: float, tenure_months: int) -> str:
             # Append to schedule at the end of each year or the final month
             if month % 12 == 0 or month == tenure_months:
                 year = month // 12 if month % 12 == 0 else (month // 12) + 1
-                schedule += f"| Year {year} | Rs. {yearly_principal:,.2f} | Rs. {yearly_interest:,.2f} | Rs. {max(0, balance):,.2f} |\n"
-                # Reset yearly counters
+                # Format numbers with commas and 2 decimal places for a professional look
+                schedule += f"| Year {year} | ₹ {yearly_principal:,.2f} | ₹ {yearly_interest:,.2f} | ₹ {max(0, balance):,.2f} |\n"
+                
+                # Reset yearly counters for the next loop
                 yearly_principal = 0
                 yearly_interest = 0
         
-        # We return the raw calculation cleanly back to the LLM
-        return (f"Calculation Successful.\n"
-                f"Monthly EMI: Rs. {emi:,.2f}\n"
-                f"Total Interest Payable: Rs. {total_interest:,.2f}\n"
-                f"Total Amount to be Paid: Rs. {total_amount:,.2f}"
+        # Return the clean, calculated data back to the LLM context
+        return (f"**Calculation Successful:**\n"
+                f"- **Monthly EMI:** ₹ {emi:,.2f}\n"
+                f"- **Total Interest Payable:** ₹ {total_interest:,.2f}\n"
+                f"- **Total Amount to be Paid:** ₹ {total_amount:,.2f}\n"
                 f"{schedule}")
                 
     except Exception as e:
         return f"Error calculating EMI: {str(e)}"
 
 # A list of all tools our agent is allowed to use.
-# We will bind this list to Qwen2.5-Coder in the next phase.
 AGENT_TOOLS = [search_loan_policies, calculate_emi]
 
 ==================================================
 File: final_project/src/agent/graph.py
 ==================================================
 import json
-import uuid
+from langchain_core.messages import SystemMessage
+from langchain_ollama import ChatOllama
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode, tools_condition
-from langchain_ollama import ChatOllama
-from langchain_core.messages import SystemMessage
 
 from src.agent.state import AgentState
 from src.agent.tools import AGENT_TOOLS
 from src.config import LLM_MODEL, OLLAMA_BASE_URL
 
-# 1. Initialize the LLM and bind our specific tools to it
 # Temperature is set to 0 to prevent the LLM from hallucinating financial figures
 llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0)
 llm_with_tools = llm.bind_tools(AGENT_TOOLS)
@@ -14935,7 +15066,6 @@ CRITICAL RULES:
 5. Be polite, concise, and use markdown formatting (bullet points, bold text) to structure your answers beautifully.
 """
 
-# 2. Define the Agent Node
 def chatbot(state: AgentState):
     """
     This is the core reasoning node. It takes the conversation history,
@@ -14944,7 +15074,7 @@ def chatbot(state: AgentState):
     messages = state["messages"]
     sys_msg = SystemMessage(content=SYSTEM_PROMPT)
     
-    # We pass the system message + the entire conversation history to the LLM
+    # Pass the system message + the entire conversation history to the LLM
     response = llm_with_tools.invoke([sys_msg] + messages)
     
     # --- PRODUCTION GUARDRAIL: Local LLM JSON Fallback ---
@@ -14966,7 +15096,6 @@ def chatbot(state: AgentState):
     
     return {"messages": [response]}
 
-# 3. Build the LangGraph State Machine
 workflow = StateGraph(AgentState)
 
 # Add the nodes (the "actors" in our graph)
@@ -14979,10 +15108,7 @@ workflow.set_entry_point("agent")
 # Add conditional routing:
 # After the agent thinks, 'tools_condition' checks if the LLM decided to use a tool.
 # If yes -> route to 'tools' node. If no -> route to END (it finished answering).
-workflow.add_conditional_edges(
-    "agent",
-    tools_condition,
-)
+workflow.add_conditional_edges("agent", tools_condition)
 
 # If it went to the 'tools' node, it MUST go back to the 'agent' node 
 # so the LLM can read the tool's output and format a natural response.
