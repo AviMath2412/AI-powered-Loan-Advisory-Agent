@@ -6,6 +6,7 @@ from langgraph.graph import StateGraph, END
 
 from src.agent.state import AgentState
 from src.agent.tools import search_loan_policies, calculate_emi, check_credit_score
+from src.agent.extractors import extract_calc_params, looks_like_calc_request
 from src.config import LLM_MODEL, OLLAMA_BASE_URL
 from src.memory import get_checkpointer
 
@@ -87,13 +88,34 @@ def planner_node(state: AgentState):
         if value is not None:
             profile[key] = value
 
+    # --- Regex fallback for calc_params -------------------------------------
+    # Small local models are unreliable at converting "20 Lakh" -> 2000000 or
+    # "5 years" -> 60 inside a JSON blob. If the LLM's extraction is missing or
+    # incomplete, and we can parse the numbers ourselves from the raw message,
+    # trust the regex extraction instead of leaving the Calculator empty-handed.
+    calc_params = plan.get("calc_params")
+    calc_params_complete = (
+        isinstance(calc_params, dict)
+        and all(calc_params.get(k) for k in ("principal", "rate_pa", "tenure_months"))
+    )
+    regex_params = None
+    if not calc_params_complete:
+        regex_params = extract_calc_params(user_msg)
+        if regex_params:
+            calc_params = regex_params
+
+    needs_calculation = bool(plan.get("needs_calculation", False))
+    if regex_params and looks_like_calc_request(user_msg):
+        needs_calculation = True
+    # -------------------------------------------------------------------------
+
     return {
         "user_profile": profile,
         "needs_research": bool(plan.get("needs_research", False)),
-        "needs_calculation": bool(plan.get("needs_calculation", False)),
+        "needs_calculation": needs_calculation,
         "needs_credit_check": bool(plan.get("needs_credit_check", False)),
         "search_query": plan.get("search_query") or user_msg,
-        "calc_params": plan.get("calc_params"),
+        "calc_params": calc_params,
         "applicant_id": plan.get("applicant_id"),
         "retry_count": 0,
     }

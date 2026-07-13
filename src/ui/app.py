@@ -1,12 +1,10 @@
 import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-
 import uuid
 import pandas as pd
 import streamlit as st
 from langchain_core.messages import HumanMessage
-
 from src.agent.graph import app
 from src.agent.tools import compute_amortization_schedule
 from src.memory import list_thread_ids
@@ -17,14 +15,12 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
 st.markdown("""
 <style>
     .stChatMessage { border-radius: 10px; padding: 15px; margin-bottom: 10px; }
     .stChatInput { padding-bottom: 20px; }
 </style>
 """, unsafe_allow_html=True)
-
 NODE_LABELS = {
     "planner": "🧭 Planning — deciding what's needed",
     "researcher": "📚 Researching policy documents",
@@ -145,8 +141,13 @@ if prompt:
     with st.chat_message("assistant"):
         status_box = st.status("Agent is working...", expanded=True)
         try:
+            # IMPORTANT: only send the NEW message, not the full history. The
+            # SqliteSaver checkpointer already holds prior turns for this thread_id;
+            # `messages` uses add_messages, which APPENDS. Sending the full
+            # st.session_state.messages list here would re-append everything that's
+            # already checkpointed, duplicating the conversation on every turn.
             for update in app.stream(
-                {"messages": st.session_state.messages},
+                {"messages": [HumanMessage(content=prompt)]},
                 config=config,
                 stream_mode="updates",
             ):

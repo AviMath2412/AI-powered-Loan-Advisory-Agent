@@ -1,39 +1,41 @@
-import sqlite3
 import os
-# pyrefly: ignore [missing-import]
+import sqlite3
+
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-# Define absolute path to database in the project data/ directory
-DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data/checkpoints.sqlite"))
+# Lives alongside your chroma_db, in data/
+CHECKPOINT_DB_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "data", "checkpoints.sqlite"
+)
+CHECKPOINT_DB_PATH = os.path.normpath(CHECKPOINT_DB_PATH)
+
+_checkpointer = None
+
 
 def get_checkpointer() -> SqliteSaver:
     """
-    Initializes and returns the SqliteSaver checkpointer for LangGraph.
-    Ensures that the target database file and schema are set up.
+    Returns a process-wide singleton SqliteSaver so Streamlit reruns (which re-execute the
+    whole script) don't reopen a new connection every turn. Requires `langgraph-checkpoint-sqlite`.
     """
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    checkpointer = SqliteSaver(conn)
-    checkpointer.setup()
-    return checkpointer
+    global _checkpointer
+    if _checkpointer is None:
+        os.makedirs(os.path.dirname(CHECKPOINT_DB_PATH), exist_ok=True)
+        conn = sqlite3.connect(CHECKPOINT_DB_PATH, check_same_thread=False)
+        _checkpointer = SqliteSaver(conn)
+    return _checkpointer
+
 
 def list_thread_ids() -> list[str]:
-    """
-    Queries the database and returns a list of all unique thread IDs.
-    """
-    if not os.path.exists(DB_PATH):
+    """Used by the UI's session picker to list past conversations."""
+    if not os.path.exists(CHECKPOINT_DB_PATH):
         return []
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        # Verify if table exists before querying
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='checkpoints';")
-        if not cursor.fetchone():
-            conn.close()
-            return []
-        cursor.execute("SELECT DISTINCT thread_id FROM checkpoints;")
-        thread_ids = [row[0] for row in cursor.fetchall() if row[0]]
+        conn = sqlite3.connect(CHECKPOINT_DB_PATH)
+        cur = conn.execute(
+            "SELECT DISTINCT thread_id FROM checkpoints ORDER BY thread_id DESC"
+        )
+        threads = [row[0] for row in cur.fetchall()]
         conn.close()
-        return thread_ids
-    except Exception:
+        return threads
+    except sqlite3.Error:
         return []
