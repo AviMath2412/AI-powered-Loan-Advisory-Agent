@@ -11,7 +11,6 @@ from src.memory import list_thread_ids, delete_thread
 
 st.set_page_config(
     page_title="AI Loan Advisory Agent",
-    page_icon="🏦",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -22,12 +21,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 NODE_LABELS = {
-    "planner": "🧭 Planning — deciding what's needed",
-    "researcher": "📚 Researching policy documents",
-    "calculator": "🧮 Running EMI calculation",
-    "credit": "🪪 Checking credit score",
-    "critic": "🔍 Checking evidence quality",
-    "synthesizer": "✍️ Writing final answer",
+    "planner": "Planning — deciding what's needed",
+    "researcher": "Researching policy documents",
+    "calculator": "Running EMI calculation",
+    "credit": "Checking credit score",
+    "critic": "Checking evidence quality",
+    "synthesizer": "Writing final answer",
 }
 
 # ---------------------------------------------------------------------------
@@ -102,7 +101,7 @@ with st.sidebar:
     # Start and delete session buttons
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("➕ New", use_container_width=True, help="Start a new session"):
+        if st.button("New", use_container_width=True, help="Start a new session"):
             st.session_state.thread_id = str(uuid.uuid4())[:8]
             st.session_state.messages = []
             st.session_state.user_profile = {}
@@ -111,7 +110,7 @@ with st.sidebar:
             st.rerun()
     with col2:
         if st.session_state.thread_id in threads:
-            if st.button("🗑️ Delete", use_container_width=True, help="Delete the current session"):
+            if st.button("Delete", use_container_width=True, help="Delete the current session"):
                 delete_thread(st.session_state.thread_id)
                 st.session_state.thread_id = str(uuid.uuid4())[:8]
                 st.session_state.messages = []
@@ -123,7 +122,7 @@ with st.sidebar:
 
     # Document upload section
     st.divider()
-    st.subheader("📄 Upload Document")
+    st.subheader("Upload Document")
     uploaded_file = st.file_uploader(
         "PDF or TXT file",
         type=["pdf", "txt"],
@@ -168,7 +167,7 @@ with st.sidebar:
         st.success(f"Loaded: `{st.session_state.uploaded_doc_name}`")
 
     st.divider()
-    st.subheader("👤 User Profile")
+    st.subheader("User Profile")
     profile = {k: v for k, v in st.session_state.user_profile.items() if v is not None}
     if profile:
         st.markdown(
@@ -193,7 +192,7 @@ with st.sidebar:
 # Main chat area
 # ---------------------------------------------------------------------------
 
-st.title("🏦 AI-Powered Loan Advisory Agent")
+st.title("AI-Powered Loan Advisory Agent")
 st.markdown(
     "Ask about loan eligibility, policies, interest rates, or EMI calculations. "
     "Policy answers are retrieved from internal documents; math is computed deterministically, never guessed by the LLM."
@@ -208,7 +207,7 @@ for msg in st.session_state.messages:
 prompt = st.chat_input("E.g., What is the minimum income for a Home Loan?", key="chat_input")
 
 if not st.session_state.messages:
-    st.info("👋 Welcome! Try asking one of the common queries below:")
+    st.info("Welcome! Try asking one of the common queries below:")
     suggestion = st.pills(
         "Starter queries:",
         [
@@ -282,7 +281,7 @@ if prompt:
         st.markdown(final_response.content)
 
         # Live agent trace, replacing the old post-hoc "thought process" expander
-        with st.expander("👁️ View Agent Trace", expanded=False):
+        with st.expander("View Agent Trace", expanded=False):
             st.markdown(f"**Needs research:** {full_state.get('needs_research')}")
             if full_state.get("needs_research"):
                 st.markdown(f"- Search query: `{full_state.get('search_query')}`")
@@ -302,7 +301,7 @@ if prompt:
                 )
                 if schedule:
                     df = pd.DataFrame(schedule)
-                    with st.expander("📊 Amortization chart", expanded=False):
+                    with st.expander("Amortization chart", expanded=False):
                         st.dataframe(df, use_container_width=True, hide_index=True)
                         st.line_chart(df.set_index("year")[["principal_paid", "interest_paid"]])
             except (KeyError, ValueError, TypeError):

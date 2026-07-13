@@ -92,7 +92,7 @@ def calculate_emi(principal: float, rate_pa: float, tenure_months: int) -> str:
         total_amount = emi * tenure_months
         total_interest = total_amount - principal
 
-        table = "\n\n### 📊 Yearly Amortization Schedule\n"
+        table = "\n\n### Yearly Amortization Schedule\n"
         table += "| Year | Principal Paid | Interest Paid | Ending Balance |\n"
         table += "|------|----------------|---------------|----------------|\n"
         for row in schedule:
