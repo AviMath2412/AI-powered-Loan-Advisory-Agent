@@ -23,7 +23,7 @@ def compute_amortization_schedule(principal: float, rate_pa: float, tenure_month
 
     Returns a list of yearly rows: {"year", "principal_paid", "interest_paid", "ending_balance"}.
     """
-    if tenure_months <= 0:
+    if principal <= 0 or rate_pa < 0 or tenure_months <= 0:
         return []
 
     if rate_pa == 0:
@@ -72,6 +72,13 @@ def calculate_emi(principal: float, rate_pa: float, tenure_months: int) -> str:
         tenure_months: The duration of the loan in months (e.g., 60).
     """
     try:
+        if principal <= 0:
+            return "Error calculating EMI: Loan principal must be greater than zero."
+        if rate_pa < 0:
+            return "Error calculating EMI: Interest rate cannot be negative."
+        if tenure_months <= 0:
+            return "Error calculating EMI: Loan tenure must be greater than zero."
+
         schedule = compute_amortization_schedule(principal, rate_pa, tenure_months)
         if not schedule:
             return "Error calculating EMI: tenure_months must be greater than 0."

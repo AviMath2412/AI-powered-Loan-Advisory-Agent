@@ -4,6 +4,7 @@ from langgraph.graph.message import add_messages
 
 
 class UserProfile(TypedDict, total=False):
+    name: Optional[str]
     age: Optional[int]
     employment_type: Optional[str]
     monthly_income: Optional[float]

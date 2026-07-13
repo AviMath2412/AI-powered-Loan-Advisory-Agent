@@ -11,15 +11,7 @@ from src.config import LLM_MODEL, OLLAMA_BASE_URL
 from src.memory import get_checkpointer
 
 MAX_RETRIES = 2
-
-# Temperature 0 everywhere: every node here does either structured extraction or
-# grounded synthesis, never free-form chat, so we want deterministic output throughout.
 llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0)
-
-
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
 
 def _last_human_message(state: AgentState) -> str:
     for msg in reversed(state["messages"]):
@@ -48,13 +40,8 @@ def _safe_json_parse(raw: str) -> dict:
     except json.JSONDecodeError:
         return {}
 
-
-# ---------------------------------------------------------------------------
-# Planner
-# ---------------------------------------------------------------------------
-
 PLANNER_PROMPT = """You are the Planner in a multi-agent loan advisory system.
-Read the user's latest message and the known user profile, then output ONLY a JSON object
+Read the conversation history, the uploaded document context (if any), and the known user profile, then output ONLY a JSON object
 (no prose, no markdown fences) with this exact shape:
 
 {{
@@ -64,23 +51,33 @@ Read the user's latest message and the known user profile, then output ONLY a JS
   "search_query": "best search query for the policy database, or empty string",
   "calc_params": {{"principal": number, "rate_pa": number, "tenure_months": number}} or null,
   "applicant_id": "string the user gave to identify themselves, or null",
-  "profile_updates": {{"age": number or null, "employment_type": "string or null", "monthly_income": number or null, "loan_type_interest": "string or null"}}
+  "profile_updates": {{"name": "string or null", "age": number or null, "employment_type": "string or null", "monthly_income": number or null, "loan_type_interest": "string or null"}}
 }}
 
 Rules:
 - needs_research = true whenever the user asks about eligibility, interest rates, fees, documents, or any bank policy.
-- needs_calculation = true whenever the user asks for an EMI, monthly payment, or amortization schedule, AND gives (or has previously given) enough numbers to compute it. If numbers are missing, set this false.
+- needs_calculation = true whenever the user asks for an EMI, monthly payment, or amortization schedule, AND you have (either in the latest message or from earlier in the conversation history) enough numbers to compute it. If numbers are missing, set this false.
 - needs_credit_check = true ONLY if the user explicitly asks to check/simulate their credit score. Never infer this on your own.
-- Only fill profile_updates fields you can confidently infer from this message; otherwise use null.
+- Only fill profile_updates fields you can confidently infer from the conversation or the uploaded document; otherwise use null. Pay special attention to the uploaded document text (like a resume) to extract the user's name, age, income, or employment details.
 
-Known user profile so far: {profile}
+Known user profile so far: {profile}{uploaded_doc}
 """
-
 
 def planner_node(state: AgentState):
     user_msg = _last_human_message(state)
-    prompt = PLANNER_PROMPT.format(profile=json.dumps(state.get("user_profile", {})))
-    response = llm.invoke([SystemMessage(content=prompt), HumanMessage(content=user_msg)])
+    
+    uploaded_doc = ""
+    if state.get("uploaded_doc_text"):
+        uploaded_doc = f"\n\nUploaded document context ({state.get('uploaded_doc_name', 'document')}):\n{state.get('uploaded_doc_text')[:2000]}"
+
+    prompt = PLANNER_PROMPT.format(
+        profile=json.dumps(state.get("user_profile", {})),
+        uploaded_doc=uploaded_doc
+    )
+    
+    # We pass the last 5 messages for conversation history awareness
+    history_messages = [SystemMessage(content=prompt)] + state["messages"][-5:]
+    response = llm.invoke(history_messages)
     plan = _safe_json_parse(response.content)
 
     profile = dict(state.get("user_profile", {}))
@@ -88,26 +85,29 @@ def planner_node(state: AgentState):
         if value is not None:
             profile[key] = value
 
-    # --- Regex fallback for calc_params -------------------------------------
-    # Small local models are unreliable at converting "20 Lakh" -> 2000000 or
-    # "5 years" -> 60 inside a JSON blob. If the LLM's extraction is missing or
-    # incomplete, and we can parse the numbers ourselves from the raw message,
-    # trust the regex extraction instead of leaving the Calculator empty-handed.
+    # --- Regex fallback for calc_params with conversational awareness ---------
+    # Concatenate last 3 human messages to parse parameters spread across turns
+    recent_msgs = []
+    for msg in reversed(state["messages"]):
+        if msg.type == "human":
+            recent_msgs.insert(0, msg.content)
+            if len(recent_msgs) >= 3:
+                break
+    history_text = "\n".join(recent_msgs)
+
+    # ALWAYS prioritize deterministic regex extraction of numbers over LLM extraction to prevent unit/decimal hallucinations
+    regex_params = extract_calc_params(history_text)
     calc_params = plan.get("calc_params")
+    
+    if regex_params:
+        calc_params = regex_params
     calc_params_complete = (
         isinstance(calc_params, dict)
-        and all(calc_params.get(k) for k in ("principal", "rate_pa", "tenure_months"))
+        and all(calc_params.get(k) is not None for k in ("principal", "rate_pa", "tenure_months"))
     )
-    regex_params = None
-    if not calc_params_complete:
-        regex_params = extract_calc_params(user_msg)
-        if regex_params:
-            calc_params = regex_params
-
     needs_calculation = bool(plan.get("needs_calculation", False))
-    if regex_params and looks_like_calc_request(user_msg):
+    if calc_params_complete and (looks_like_calc_request(user_msg) or looks_like_calc_request(history_text)):
         needs_calculation = True
-    # -------------------------------------------------------------------------
 
     return {
         "user_profile": profile,
@@ -119,12 +119,6 @@ def planner_node(state: AgentState):
         "applicant_id": plan.get("applicant_id"),
         "retry_count": 0,
     }
-
-
-# ---------------------------------------------------------------------------
-# Researcher / Calculator / Credit — deterministic execution, no LLM tool-calling.
-# Planner already extracted the parameters; these nodes just run the functions.
-# ---------------------------------------------------------------------------
 
 def researcher_node(state: AgentState):
     evidence = ""
@@ -159,11 +153,6 @@ def credit_node(state: AgentState):
     applicant_id = state.get("applicant_id") or "anonymous"
     result = check_credit_score.invoke({"applicant_id": applicant_id})
     return {"credit_result": result}
-
-
-# ---------------------------------------------------------------------------
-# Critic — self-reflection / evidence sufficiency check
-# ---------------------------------------------------------------------------
 
 CRITIC_PROMPT = """You are the Critic in a multi-agent loan advisory system.
 Judge whether the evidence below is enough to answer the user's question well.
@@ -215,6 +204,10 @@ never invent a policy figure, rate, or eligibility rule that isn't in the eviden
 Be polite, concise, and use markdown (bold, bullet points) to structure the answer.
 If research was needed but the evidence is empty or irrelevant, say plainly that the
 information is not in the current policy documents, rather than guessing.
+
+Rules:
+- If the Calculation result contains an error message (e.g., starts with "Error"), explain the error clearly to the user and request valid inputs. Do not claim the calculation was successful or output any amortization figures.
+- When comparing user profile numbers (like age or income) to policy requirements (like minimum income or age limits), perform the comparison carefully and accurately (e.g., verify that a user income of 120,000 is greater than a minimum requirement of 10,000).
 
 User question: {question}
 User profile: {profile}
