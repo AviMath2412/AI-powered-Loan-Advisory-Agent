@@ -127,9 +127,14 @@ def planner_node(state: AgentState):
 # ---------------------------------------------------------------------------
 
 def researcher_node(state: AgentState):
-    if not state.get("needs_research"):
-        return {"research_evidence": ""}
-    evidence = search_loan_policies.invoke({"query": state["search_query"]})
+    evidence = ""
+    if state.get("needs_research"):
+        evidence = search_loan_policies.invoke({"query": state["search_query"]})
+    
+    if state.get("uploaded_doc_text"):
+        doc_name = state.get("uploaded_doc_name") or "Uploaded Document"
+        evidence += f"\n\n[CONTEXT FROM UPLOADED DOCUMENT ({doc_name}):\n{state['uploaded_doc_text']}\n]"
+        
     return {"research_evidence": evidence}
 
 

@@ -7,7 +7,7 @@ import streamlit as st
 from langchain_core.messages import HumanMessage
 from src.agent.graph import app
 from src.agent.tools import compute_amortization_schedule
-from src.memory import list_thread_ids
+from src.memory import list_thread_ids, delete_thread
 
 st.set_page_config(
     page_title="AI Loan Advisory Agent",
@@ -71,29 +71,123 @@ with st.sidebar:
     st.subheader("Session")
     threads = list_thread_ids()
     options = ["New session"] + threads
-    current_index = options.index(st.session_state.thread_id) if st.session_state.thread_id in options else 0
-    choice = st.selectbox("Conversation", options, index=current_index)
+    
+    # Determine selectbox index safely
+    if st.session_state.thread_id in threads:
+        current_index = options.index(st.session_state.thread_id)
+    else:
+        current_index = 0
 
-    if choice != "New session" and choice != st.session_state.thread_id:
-        _load_thread(choice)
-        st.rerun()
+    def on_session_change():
+        choice = st.session_state.session_selector
+        if choice == "New session":
+            st.session_state.thread_id = str(uuid.uuid4())[:8]
+            st.session_state.messages = []
+            st.session_state.user_profile = {}
+            st.session_state.uploaded_doc_text = ""
+            st.session_state.uploaded_doc_name = ""
+        else:
+            _load_thread(choice)
+
+    choice = st.selectbox(
+        "Conversation",
+        options,
+        index=current_index,
+        key="session_selector",
+        on_change=on_session_change
+    )
 
     st.caption(f"Thread ID: `{st.session_state.thread_id}`")
 
-    if st.button("Start New Session", type="primary", use_container_width=True):
-        st.session_state.thread_id = str(uuid.uuid4())[:8]
-        st.session_state.messages = []
-        st.session_state.user_profile = {}
-        st.rerun()
+    # Start and delete session buttons
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("➕ New", use_container_width=True, help="Start a new session"):
+            st.session_state.thread_id = str(uuid.uuid4())[:8]
+            st.session_state.messages = []
+            st.session_state.user_profile = {}
+            st.session_state.uploaded_doc_text = ""
+            st.session_state.uploaded_doc_name = ""
+            st.rerun()
+    with col2:
+        if st.session_state.thread_id in threads:
+            if st.button("🗑️ Delete", use_container_width=True, help="Delete the current session"):
+                delete_thread(st.session_state.thread_id)
+                st.session_state.thread_id = str(uuid.uuid4())[:8]
+                st.session_state.messages = []
+                st.session_state.user_profile = {}
+                st.session_state.uploaded_doc_text = ""
+                st.session_state.uploaded_doc_name = ""
+                st.toast("Session deleted successfully!")
+                st.rerun()
+
+    # Document upload section
+    st.divider()
+    st.subheader("📄 Upload Document")
+    uploaded_file = st.file_uploader(
+        "PDF or TXT file",
+        type=["pdf", "txt"],
+        help="The agent will ground its responses in the contents of this document."
+    )
+
+    # Initialize uploaded document session state
+    if "uploaded_doc_text" not in st.session_state:
+        st.session_state.uploaded_doc_text = ""
+    if "uploaded_doc_name" not in st.session_state:
+        st.session_state.uploaded_doc_name = ""
+
+    if uploaded_file is not None:
+        if uploaded_file.name != st.session_state.uploaded_doc_name:
+            with st.spinner("Processing document..."):
+                try:
+                    file_contents = ""
+                    if uploaded_file.type == "application/pdf":
+                        import fitz  # PyMuPDF
+                        doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+                        pages_text = []
+                        for page in doc:
+                            pages_text.append(page.get_text())
+                        file_contents = "\n".join(pages_text)
+                    else:
+                        file_contents = uploaded_file.read().decode("utf-8")
+                    
+                    import re
+                    file_contents = re.sub(r'\n+', '\n', file_contents)
+                    file_contents = re.sub(r'\s{2,}', ' ', file_contents)
+                    
+                    st.session_state.uploaded_doc_text = file_contents.strip()
+                    st.session_state.uploaded_doc_name = uploaded_file.name
+                    st.toast(f"Successfully processed {uploaded_file.name}!")
+                except Exception as e:
+                    st.error(f"Error parsing file: {e}")
+    else:
+        st.session_state.uploaded_doc_text = ""
+        st.session_state.uploaded_doc_name = ""
+
+    if st.session_state.uploaded_doc_name:
+        st.success(f"Loaded: `{st.session_state.uploaded_doc_name}`")
 
     st.divider()
-    st.subheader("What I know about you")
+    st.subheader("👤 User Profile")
     profile = {k: v for k, v in st.session_state.user_profile.items() if v is not None}
     if profile:
+        st.markdown(
+            '<div style="background-color: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 15px;">',
+            unsafe_allow_html=True
+        )
         for key, value in profile.items():
-            st.markdown(f"- **{key.replace('_', ' ').title()}:** {value}")
+            field_name = key.replace('_', ' ').title()
+            if isinstance(value, float) or isinstance(value, int):
+                if "income" in key.lower():
+                    val_str = f"₹ {value:,.2f}"
+                else:
+                    val_str = str(value)
+            else:
+                val_str = str(value)
+            st.markdown(f"**{field_name}:** `{val_str}`")
+        st.markdown('</div>', unsafe_allow_html=True)
     else:
-        st.caption("Nothing yet — ask a question and I'll build a profile as we go.")
+        st.caption("No user profile details extracted yet.")
 
 # ---------------------------------------------------------------------------
 # Main chat area
@@ -138,20 +232,39 @@ if prompt:
 
     config = {"configurable": {"thread_id": st.session_state.thread_id}}
 
+    # Prepare input state
+    input_state = {
+        "messages": [HumanMessage(content=prompt)]
+    }
+    if st.session_state.get("uploaded_doc_text"):
+        input_state["uploaded_doc_text"] = st.session_state.uploaded_doc_text
+        input_state["uploaded_doc_name"] = st.session_state.uploaded_doc_name
+    else:
+        input_state["uploaded_doc_text"] = ""
+        input_state["uploaded_doc_name"] = ""
+
     with st.chat_message("assistant"):
         status_box = st.status("Agent is working...", expanded=True)
         try:
-            # IMPORTANT: only send the NEW message, not the full history. The
-            # SqliteSaver checkpointer already holds prior turns for this thread_id;
-            # `messages` uses add_messages, which APPENDS. Sending the full
-            # st.session_state.messages list here would re-append everything that's
-            # already checkpointed, duplicating the conversation on every turn.
+            # We track whether calculation/credit steps are needed from the planner node's output
+            needs_calc = False
+            needs_credit = False
             for update in app.stream(
-                {"messages": [HumanMessage(content=prompt)]},
+                input_state,
                 config=config,
                 stream_mode="updates",
             ):
-                for node_name in update:
+                for node_name, values in update.items():
+                    if node_name == "planner":
+                        needs_calc = bool(values.get("needs_calculation", False))
+                        needs_credit = bool(values.get("needs_credit_check", False))
+                    
+                    # Conditionally skip displaying calculation/credit nodes if not needed
+                    if node_name == "calculator" and not needs_calc:
+                        continue
+                    if node_name == "credit" and not needs_credit:
+                        continue
+                    
                     status_box.write(NODE_LABELS.get(node_name, node_name))
         except Exception as e:
             status_box.update(label="Error", state="error")

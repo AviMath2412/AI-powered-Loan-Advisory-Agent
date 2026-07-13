@@ -23,6 +23,8 @@ class AgentState(TypedDict):
 
     # Persistent across turns (checkpointed)
     user_profile: UserProfile
+    uploaded_doc_text: Optional[str]
+    uploaded_doc_name: Optional[str]
 
     # Scratch space, rebuilt each turn by the Planner
     needs_research: bool

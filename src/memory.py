@@ -39,3 +39,24 @@ def list_thread_ids() -> list[str]:
         return threads
     except sqlite3.Error:
         return []
+
+
+def delete_thread(thread_id: str):
+    """Deletes all checkpoints and data for a given thread_id from the database."""
+    if not os.path.exists(CHECKPOINT_DB_PATH):
+        return
+    try:
+        conn = sqlite3.connect(CHECKPOINT_DB_PATH)
+        conn.execute("DELETE FROM checkpoints WHERE thread_id = ?", (thread_id,))
+        try:
+            conn.execute("DELETE FROM checkpoint_blobs WHERE thread_id = ?", (thread_id,))
+        except sqlite3.Error:
+            pass
+        try:
+            conn.execute("DELETE FROM checkpoint_writes WHERE thread_id = ?", (thread_id,))
+        except sqlite3.Error:
+            pass
+        conn.commit()
+        conn.close()
+    except sqlite3.Error:
+        pass
