@@ -24,6 +24,7 @@ class AgentState(TypedDict):
 
     # Persistent across turns (checkpointed)
     user_profile: UserProfile
+    user_constraints: list[str]
     uploaded_doc_text: Optional[str]
     uploaded_doc_name: Optional[str]
 
@@ -35,11 +36,21 @@ class AgentState(TypedDict):
     calc_params: Optional[dict]
     applicant_id: Optional[str]
 
-    # Filled in by Researcher / Calculator / Credit nodes
     research_evidence: str
     calculation_result: str
     credit_result: str
+    validation_result: dict
+    draft_response: str
+    constraint_feedback: str
+    
+    # Confidence tracking
+    confidence_score: float
+    confidence_reasoning: list[str]
 
     # Critic loop control
     critic_verdict: Literal["sufficient", "retry"]
     retry_count: int
+
+    # Runtime model selection (optional)
+    llm_provider: Optional[str]
+    llm_model: Optional[str]

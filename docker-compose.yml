@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  agent-ui:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      - POSTGRES_URI=postgresql://admin:admin123@postgres:5432/loan_advisory
+      - VECTOR_DB_PROVIDER=pinecone
+      - PINECONE_API_KEY=${PINECONE_API_KEY}
+      - PINECONE_INDEX_NAME=loan-policies
+      - LLM_PROVIDER=ollama
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin123
+      - POSTGRES_DB=loan_advisory
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d loan_advisory"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

@@ -1,7 +1,21 @@
 venv/
 __pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
 .env
+.env.*
+
+# Data & DBs
 data/raw_pdfs/
 data/processed_text/
 data/chroma_db/
+*.sqlite
+*.db
+pgdata/
+
+# OS & IDE
 .DS_Store
+.idea/
+.vscode/

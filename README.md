@@ -10,26 +10,27 @@ The application operates as a stateful multi-agent system orchestrated using **L
 
 ```mermaid
 graph TD
-    Start([User Input]) --> Planner[1. Planner Node]
-    Planner --> Researcher[2. Researcher Node]
-    Researcher --> Calculator[3. Calculator Node]
-    Calculator --> Credit[4. Credit Checker Node]
-    Credit --> Critic[5. Critic Node]
-    
-    Critic -->|Verdict: sufficient| Synthesizer[6. Synthesizer Node]
-    Critic -->|Verdict: retry / rewrite query| Researcher
-    
-    Synthesizer --> End([Polished Markdown Response])
+    Start([User Input]) --> Intent[1. Intent Detection]
+    Intent --> Constraints[2. Constraint Extraction]
+    Constraints --> Memory[3. Memory Retrieval]
+    Memory --> Retrieve[4. Document Retrieval (RRF)]
+    Retrieve --> Conflicts[5. Conflict Detection]
+    Conflicts --> MissingInfo[6. Missing Info Detection]
+    MissingInfo --> Confidence[7. Confidence Estimation]
+    Confidence --> Policy[8. Policy Validation]
+    Policy --> Reasoning[9. Reasoning Agent]
+    Reasoning --> Grounding[10. Grounding Verification]
+    Grounding --> Formatter[11. Response Formatter]
+    Formatter --> End([12. Final Response])
 ```
 
-### Agent Node Breakdown
+### Core Architectural Advancements
 
-* **Planner:** Evaluates the user input against the conversation history and updates the user profile. Determines which capabilities (database search, math calculation, credit score checking) are needed and extracts parameters.
-* **Researcher:** Executes vector database searches over internal policy documents.
-* **Calculator:** Performs mathematical calculations (monthly EMI and yearly amortization schedules) deterministically.
-* **Credit Checker:** Simulated credit checking agent to simulate financial profile ratings.
-* **Critic:** Evaluates if the research evidence is sufficient and on-topic. If not, it rewrites the query and triggers a retry loop (capped at a maximum of 2 retries).
-* **Synthesizer:** Formulates a clear, professional, and formatted response grounded strictly in the gathered evidence.
+* **Strict Pydantic Payloads:** The pipeline replaces unstructured dictionary states with strictly typed `pydantic.BaseModel` objects across all 12 sequential nodes, providing strong guarantees against downstream state corruption.
+* **Evidence-First Retrieval:** Retrieves documents using parallel queries merged via **Reciprocal Rank Fusion (RRF)**. Each chunk retains explicit metadata (`Source`, `Retrieval Score`, `Timestamp`, `Trust Score`).
+* **Deterministic Numeric Engine:** The LLM is firewalled from doing mental math. All LTV validations, APR comparisons, date manipulation, and compound interest calculations are offloaded to a zero-dependency Python utility (`numeric_utils.py`).
+* **Adversarial Hallucination Guard:** The penultimate graph node acts as a factual editor, verifying that every generated sentence can be explicitly traced back to the retrieved chunks or deterministic tool outputs.
+* **Missing Information Detection:** Employs a cross-domain utility to gracefully refuse requests if required variables (e.g., remaining tenure) are omitted, rather than hallucinating inputs.
 
 ---
 
@@ -37,9 +38,10 @@ graph TD
 
 * **End-to-End Ingestion Pipeline:** Custom text processing script that parses raw banking PDFs, cleans layouts, and extracts structured text.
 * **Vector Indexing & Retrieval:** Text splits are indexed into a local ChromaDB database utilizing `Nomic-Embed-Text` embeddings. Search query retrieval is configured with $k=5$ for comprehensive context matching.
-* **Stateful Conversation Memory:** Uses a persistent SQLite checkpointer (`SqliteSaver`) to maintain chat states, user profiles, and conversation threads across app updates and server restarts.
-* **Robust JSON Guardrails:** Integrates custom fallback parsing to intercept and format raw JSON output structures produced by local LLMs, mapping them directly to LangGraph execution blocks.
-* **Deterministic Mathematical Engine:** Calculates loan interest and principal schedules programmatically, avoiding LLM hallucinations for amortization statistics.
+* **JWT Authentication & Multi-Tenancy:** Secure session handling utilizing `bcrypt` hashing, sliding-window rate limiting, and JWT tokens to scope threads natively per-user.
+* **Managed Vector DB & RRF:** Configurable fallback between local ChromaDB and managed high-availability **Pinecone** clusters.
+* **Production Persistence (PostgreSQL):** Uses `PostgresSaver` for concurrent multi-user checkpointer capabilities.
+* **Cost & Observability:** Implements custom JSON-structured logging and real-time telemetry metrics (`Tokens`, `Latency`, `Est. LLM Cost`).
 
 ---
 
@@ -47,11 +49,11 @@ graph TD
 
 | Component | Choice | Configuration |
 | :--- | :--- | :--- |
-| **Orchestrator** | LangGraph / LangChain | Multi-agent state graph with SQLite persistence |
-| **Language Model** | Qwen-2.5-Coder:7b | Local execution via Ollama (Temperature = 0) |
-| **Embeddings** | Nomic-Embed-Text | Local embedding model via Ollama |
-| **Vector DB** | ChromaDB | Local file-system vector store ($k=5$) |
-| **Frontend** | Streamlit | Chat interface with live execution traces and interactive charts |
+| **Orchestrator** | LangGraph | 12-Stage Pipeline with Pydantic state |
+| **Language Model** | OpenAI / Bedrock / Ollama | Dynamically configurable via UI |
+| **Vector DB** | Pinecone / ChromaDB | RRF-enabled retrieval ($k=5$) |
+| **Database** | PostgreSQL | Persistent multi-tenant state checkpointer |
+| **Frontend** | Streamlit | Integrated auth, cost tracking, & interactive UI |
 
 ---
 
@@ -91,17 +93,26 @@ pip install -r requirements.txt
 
 ---
 
-## Execution
+## Production Deployment (Docker)
 
-### CLI Terminal Interface
-Interact with the agent directly inside your terminal session:
+To deploy the production-ready application stack (Agent UI + PostgreSQL), use Docker Compose:
+
 ```bash
-python main.py
+# Provide necessary environment variables in .env
+docker-compose up --build -d
 ```
+The application will automatically apply health checks to the Postgres database and spin up on port `8501`.
 
-### Streamlit Web Dashboard
-Launch the web interface (to serve the application locally):
+## Local Development Execution
+
+If running locally without Docker:
 ```bash
 python -m streamlit run src/ui/app.py
 ```
-Open your browser and navigate to the address displayed in the terminal console (typically `http://localhost:8501`).
+
+## Running the Test Suite
+The repository includes a comprehensive set of adversarial tests to verify the pipeline's robustness against hallucinations, contradictions, missing variables, and mathematical impossibilities:
+```bash
+pytest tests/test_agent_robustness.py
+pytest tests/test_pipeline_refactor.py
+```

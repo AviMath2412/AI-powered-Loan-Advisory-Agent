@@ -8,6 +8,33 @@ from langchain_core.messages import HumanMessage
 from src.agent.graph import app
 from src.agent.tools import compute_amortization_schedule
 from src.memory import list_thread_ids, delete_thread
+import importlib
+import src.config as config
+import src.memory as memory_module
+importlib.reload(config)
+importlib.reload(memory_module)
+import src.observability as observability_module
+importlib.reload(observability_module)
+tracer = observability_module.tracer
+metrics_exporter = observability_module.metrics_exporter
+import src.auth as auth
+importlib.reload(auth)
+
+import src.agent.utils as agent_utils
+importlib.reload(agent_utils)
+
+import src.agent.schemas as schemas_module
+importlib.reload(schemas_module)
+
+import src.agent.state as state_module
+importlib.reload(state_module)
+
+import src.agent.graph as graph_module
+importlib.reload(graph_module)
+app = graph_module.app
+
+LLM_PROVIDER = getattr(config, "LLM_PROVIDER", os.getenv("LLM_PROVIDER", "ollama"))
+LLM_MODEL = getattr(config, "LLM_MODEL", os.getenv("LLM_MODEL", "qwen2.5-coder:7b"))
 
 st.set_page_config(
     page_title="AI Loan Advisory Agent",
@@ -26,7 +53,11 @@ NODE_LABELS = {
     "calculator": "Running EMI calculation",
     "credit": "Checking credit score",
     "critic": "Checking evidence quality",
-    "synthesizer": "Writing final answer",
+    "validator": "Validating constraints and conflicts",
+    "synthesizer": "Drafting response",
+    "constraint_checker": "Verifying user constraints",
+    "hallucination_guard": "Verifying factual grounding",
+    "commit": "Finalizing answer",
 }
 
 # ---------------------------------------------------------------------------
@@ -34,11 +65,49 @@ NODE_LABELS = {
 # ---------------------------------------------------------------------------
 
 if "thread_id" not in st.session_state:
-    st.session_state.thread_id = str(uuid.uuid4())[:8]
+    st.session_state.thread_id = None
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "user_profile" not in st.session_state:
     st.session_state.user_profile = {}
+if "user" not in st.session_state:
+    st.session_state.user = None
+if "jwt_token" not in st.session_state:
+    st.session_state.jwt_token = None
+
+# --- AUTHENTICATION SCREEN ---
+if not st.session_state.user:
+    st.title("AI Loan Advisory Agent")
+    st.subheader("Login to access your advisory sessions")
+    
+    tab1, tab2 = st.tabs(["Login", "Register"])
+    
+    with tab1:
+        login_username = st.text_input("Username", key="login_username")
+        login_password = st.text_input("Password", type="password", key="login_password")
+        if st.button("Login", use_container_width=True):
+            user_info = auth.authenticate_user(login_username, login_password)
+            if user_info:
+                st.session_state.user = user_info
+                st.session_state.jwt_token = auth.generate_jwt(user_info["username"], user_info["role"])
+                st.session_state.thread_id = f"{user_info['username']}_{uuid.uuid4().hex[:8]}"
+                st.rerun()
+            else:
+                st.error("Invalid username or password.")
+                
+    with tab2:
+        reg_username = st.text_input("New Username", key="reg_username")
+        reg_password = st.text_input("New Password", type="password", key="reg_password")
+        if st.button("Register", use_container_width=True):
+            if auth.register_user(reg_username, reg_password):
+                st.success("Registered successfully! Please login.")
+            else:
+                st.error("Username already exists or registration failed.")
+                
+    st.stop() # Stop execution if not logged in
+    
+if st.session_state.user and not st.session_state.thread_id:
+    st.session_state.thread_id = f"{st.session_state.user['username']}_{uuid.uuid4().hex[:8]}"
 
 
 def _load_thread(thread_id: str):
@@ -55,11 +124,19 @@ def _load_thread(thread_id: str):
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
+    if st.session_state.user:
+        st.header(f"Welcome, {st.session_state.user['username']}!")
+        if st.button("Logout", use_container_width=True):
+            st.session_state.user = None
+            st.session_state.jwt_token = None
+            st.session_state.messages = []
+            st.rerun()
+            
+        st.divider()
+    
     st.header("System Architecture")
     st.markdown("""
-    **Local Multi-Agent RAG**
-    * **LLM:** `Qwen-2.5-Coder:7b`
-    * **Embeddings:** `Nomic-Embed-Text`
+    **Multi-Agent RAG System**
     * **Vector DB:** `ChromaDB (k=5)`
     * **Orchestrator:** `LangGraph`
       Planner → Researcher → Calculator → Credit → Critic → Synthesizer
@@ -67,58 +144,73 @@ with st.sidebar:
     """)
     st.divider()
 
+    st.subheader("LLM Configuration")
+    provider_options = ["ollama", "openai", "bedrock"]
+    prov_idx = provider_options.index(LLM_PROVIDER.lower()) if LLM_PROVIDER.lower() in provider_options else 0
+    selected_provider = st.selectbox("LLM Provider", provider_options, index=prov_idx, key="provider_select")
+    selected_model = st.text_input("LLM Model", value=LLM_MODEL, key="model_input")
+    st.session_state.selected_provider = selected_provider
+    st.session_state.selected_model = selected_model
+
+    st.divider()
+
     st.subheader("Session")
-    threads = list_thread_ids()
-    options = ["New session"] + threads
-    
-    # Determine selectbox index safely
-    if st.session_state.thread_id in threads:
-        current_index = options.index(st.session_state.thread_id)
-    else:
-        current_index = 0
-
-    def on_session_change():
-        choice = st.session_state.session_selector
-        if choice == "New session":
-            st.session_state.thread_id = str(uuid.uuid4())[:8]
-            st.session_state.messages = []
-            st.session_state.user_profile = {}
-            st.session_state.uploaded_doc_text = ""
-            st.session_state.uploaded_doc_name = ""
-        else:
-            _load_thread(choice)
-
-    choice = st.selectbox(
-        "Conversation",
-        options,
-        index=current_index,
-        key="session_selector",
-        on_change=on_session_change
-    )
-
-    st.caption(f"Thread ID: `{st.session_state.thread_id}`")
-
-    # Start and delete session buttons
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("New", use_container_width=True, help="Start a new session"):
-            st.session_state.thread_id = str(uuid.uuid4())[:8]
-            st.session_state.messages = []
-            st.session_state.user_profile = {}
-            st.session_state.uploaded_doc_text = ""
-            st.session_state.uploaded_doc_name = ""
-            st.rerun()
-    with col2:
+    if st.session_state.user:
+        current_username = st.session_state.user["username"]
+        threads = memory_module.list_thread_ids(current_username)
+        options = ["New session"] + threads
+        
+        # Determine selectbox index safely
         if st.session_state.thread_id in threads:
-            if st.button("Delete", use_container_width=True, help="Delete the current session"):
-                delete_thread(st.session_state.thread_id)
-                st.session_state.thread_id = str(uuid.uuid4())[:8]
+            current_index = options.index(st.session_state.thread_id)
+        else:
+            current_index = 0
+            
+        def on_session_change():
+            choice = st.session_state.session_selector
+            if choice == "New session":
+                st.session_state.thread_id = f"{st.session_state.user['username']}_{uuid.uuid4().hex[:8]}"
                 st.session_state.messages = []
                 st.session_state.user_profile = {}
                 st.session_state.uploaded_doc_text = ""
                 st.session_state.uploaded_doc_name = ""
-                st.toast("Session deleted successfully!")
+            else:
+                _load_thread(choice)
+                
+        choice = st.selectbox(
+            "Conversation",
+            options,
+            index=current_index,
+            key="session_selector",
+            on_change=on_session_change
+        )
+        st.caption(f"Thread ID: `{st.session_state.thread_id}`")
+    else:
+        threads = []
+        current_username = ""
+
+    # Start and delete session buttons
+    if st.session_state.user:
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("New", use_container_width=True, help="Start a new session"):
+                st.session_state.thread_id = f"{st.session_state.user['username']}_{uuid.uuid4().hex[:8]}"
+                st.session_state.messages = []
+                st.session_state.user_profile = {}
+                st.session_state.uploaded_doc_text = ""
+                st.session_state.uploaded_doc_name = ""
                 st.rerun()
+        with col2:
+            if st.session_state.thread_id in threads:
+                if st.button(f"🗑️ Delete Session", key=f"del_{st.session_state.thread_id}"):
+                    memory_module.delete_thread(st.session_state.thread_id, current_username)
+                    st.session_state.thread_id = f"{st.session_state.user['username']}_{uuid.uuid4().hex[:8]}"
+                    st.session_state.messages = []
+                    st.session_state.user_profile = {}
+                    st.session_state.uploaded_doc_text = ""
+                    st.session_state.uploaded_doc_name = ""
+                    st.toast("Session deleted successfully!")
+                    st.rerun()
 
     # Document upload section
     st.divider()
@@ -225,6 +317,11 @@ if not st.session_state.messages:
 # ---------------------------------------------------------------------------
 
 if prompt:
+    # Check Rate Limiter
+    if not auth.check_rate_limit(st.session_state.user["username"], limit=30, window_minutes=60):
+        st.error("Rate limit exceeded. Please wait before sending more requests.")
+        st.stop()
+        
     with st.chat_message("user"):
         st.write(prompt)
     st.session_state.messages.append(HumanMessage(content=prompt))
@@ -233,7 +330,9 @@ if prompt:
 
     # Prepare input state
     input_state = {
-        "messages": [HumanMessage(content=prompt)]
+        "messages": [HumanMessage(content=prompt)],
+        "llm_provider": st.session_state.get("selected_provider", LLM_PROVIDER),
+        "llm_model": st.session_state.get("selected_model", LLM_MODEL),
     }
     if st.session_state.get("uploaded_doc_text"):
         input_state["uploaded_doc_text"] = st.session_state.uploaded_doc_text
@@ -281,13 +380,31 @@ if prompt:
         st.markdown(final_response.content)
 
         # Live agent trace, replacing the old post-hoc "thought process" expander
-        with st.expander("View Agent Trace", expanded=False):
+        with st.expander("View Agent Trace & Observability", expanded=False):
             st.markdown(f"**Needs research:** {full_state.get('needs_research')}")
-            if full_state.get("needs_research"):
+            if full_state.get('needs_research'):
                 st.markdown(f"- Search query: `{full_state.get('search_query')}`")
                 st.markdown(f"- Retries used: {full_state.get('retry_count', 0)}")
             st.markdown(f"**Needs calculation:** {full_state.get('needs_calculation')}")
             st.markdown(f"**Needs credit check:** {full_state.get('needs_credit_check')}")
+            
+            st.divider()
+            st.markdown("#### System Telemetry Metrics")
+            metrics = metrics_exporter.get_summary()
+            if metrics.get("token_usage"):
+                total_cost = sum(m.get("estimated_cost_usd", 0) for m in metrics["token_usage"].values())
+                st.markdown(f"**Estimated LLM Cost:** `${total_cost:.4f}`")
+                st.markdown("**Token Usage:**")
+                st.json(metrics["token_usage"])
+            if metrics.get("latencies"):
+                st.markdown("**Node Latencies:**")
+                st.json(metrics["latencies"])
+            if metrics.get("errors"):
+                st.markdown("**Errors Recorded:**")
+                st.json(metrics["errors"])
+            
+            st.divider()
+            st.markdown(f"**Active Trace Spans:** `{len(tracer.spans)}`")
 
         # Structured amortization chart, built from the same params the calculator used —
         # not re-parsed from the markdown table, so it can't drift out of sync.
