@@ -10,18 +10,18 @@ The application operates as a stateful multi-agent system orchestrated using **L
 
 ```mermaid
 graph TD
-    Start([User Input]) --> Intent[1. Intent Detection]
-    Intent --> Constraints[2. Constraint Extraction]
-    Constraints --> Memory[3. Memory Retrieval]
-    Memory --> Retrieve[4. Document Retrieval (RRF)]
-    Retrieve --> Conflicts[5. Conflict Detection]
-    Conflicts --> MissingInfo[6. Missing Info Detection]
-    MissingInfo --> Confidence[7. Confidence Estimation]
-    Confidence --> Policy[8. Policy Validation]
-    Policy --> Reasoning[9. Reasoning Agent]
-    Reasoning --> Grounding[10. Grounding Verification]
-    Grounding --> Formatter[11. Response Formatter]
-    Formatter --> End([12. Final Response])
+    Start(["User Input"]) --> Intent["1. Intent Detection"]
+    Intent --> Constraints["2. Constraint Extraction"]
+    Constraints --> Memory["3. Memory Retrieval"]
+    Memory --> Retrieve["4. Document Retrieval (RRF)"]
+    Retrieve --> Conflicts["5. Conflict Detection"]
+    Conflicts --> MissingInfo["6. Missing Info Detection"]
+    MissingInfo --> Confidence["7. Confidence Estimation"]
+    Confidence --> Policy["8. Policy Validation"]
+    Policy --> Reasoning["9. Reasoning Agent"]
+    Reasoning --> Grounding["10. Grounding Verification"]
+    Grounding --> Formatter["11. Response Formatter"]
+    Formatter --> End(["12. Final Response"])
 ```
 
 ### Core Architectural Advancements
