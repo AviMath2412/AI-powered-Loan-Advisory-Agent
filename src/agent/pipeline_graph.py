@@ -1,3 +1,4 @@
+import os
 import json
 from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
 from langgraph.graph import StateGraph, END
@@ -18,7 +19,9 @@ def _last_human_message(state: PipelineState) -> str:
     return ""
 
 def _get_llm():
-    return get_llm(provider="openai", model="gpt-4o-mini", temperature=0)
+    provider = os.getenv("LLM_PROVIDER", "ollama")
+    model = os.getenv("LLM_MODEL", "qwen2.5-coder:7b")
+    return get_llm(provider=provider, model=model, temperature=0)
 
 @trace_node("intent_detection")
 def intent_detection(state: PipelineState):
@@ -58,7 +61,7 @@ def reasoning_agent(state: PipelineState):
     llm = _get_llm()
     msg = _last_human_message(state)
     prompt = f"Answer the user query concisely: {msg}"
-    response = invoke_llm_with_resilience(llm, [SystemMessage(content=prompt)], "Fallback")
+    response = invoke_llm_with_resilience(llm, [SystemMessage(content=prompt)], fallback_response="Fallback")
     return {"reasoning": ReasoningData(draft=response)}
 
 @trace_node("grounding_verification")

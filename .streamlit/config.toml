@@ -1,0 +1,6 @@
+[server]
+folderWatchBlacklist = ["*/site-packages/*", "*/transformers/*"]
+headless = true
+
+[browser]
+gatherUsageStats = false

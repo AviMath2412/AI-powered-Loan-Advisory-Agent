@@ -47,9 +47,10 @@ class AgentState(TypedDict):
     confidence_score: float
     confidence_reasoning: list[str]
 
-    # Critic loop control
+    # Critic & Constraint loop control
     critic_verdict: Literal["sufficient", "retry"]
     retry_count: int
+    constraint_retry_count: int
 
     # Runtime model selection (optional)
     llm_provider: Optional[str]

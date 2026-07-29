@@ -15,7 +15,7 @@ CHROMA_DB_DIR = os.path.join(DATA_DIR, "chroma_db")
 
 # Service & LLM Provider Configs (loaded from environment with fallbacks)
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
-LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5-coder:7b")
+LLM_MODEL = os.getenv("LLM_MODEL", "gemma4:12b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 # Optional External Providers

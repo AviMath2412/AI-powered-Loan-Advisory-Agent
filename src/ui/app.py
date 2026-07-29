@@ -34,7 +34,7 @@ importlib.reload(graph_module)
 app = graph_module.app
 
 LLM_PROVIDER = getattr(config, "LLM_PROVIDER", os.getenv("LLM_PROVIDER", "ollama"))
-LLM_MODEL = getattr(config, "LLM_MODEL", os.getenv("LLM_MODEL", "qwen2.5-coder:7b"))
+LLM_MODEL = getattr(config, "LLM_MODEL", os.getenv("LLM_MODEL", "gemma4:12b"))
 
 st.set_page_config(
     page_title="AI Loan Advisory Agent",
@@ -148,7 +148,17 @@ with st.sidebar:
     provider_options = ["ollama", "openai", "bedrock"]
     prov_idx = provider_options.index(LLM_PROVIDER.lower()) if LLM_PROVIDER.lower() in provider_options else 0
     selected_provider = st.selectbox("LLM Provider", provider_options, index=prov_idx, key="provider_select")
-    selected_model = st.text_input("LLM Model", value=LLM_MODEL, key="model_input")
+
+    model_presets = ["gemma4:12b", "qwen2.5-coder:7b", "gemma4:31b-cloud", "gpt-4o-mini", "Custom..."]
+    curr_model = LLM_MODEL if LLM_MODEL in model_presets else "gemma4:12b"
+    model_idx = model_presets.index(curr_model) if curr_model in model_presets else 0
+    selected_model_choice = st.selectbox("LLM Model", model_presets, index=model_idx, key="model_choice_select")
+    
+    if selected_model_choice == "Custom...":
+        selected_model = st.text_input("Enter Model Name", value=LLM_MODEL, key="custom_model_input")
+    else:
+        selected_model = selected_model_choice
+
     st.session_state.selected_provider = selected_provider
     st.session_state.selected_model = selected_model
 

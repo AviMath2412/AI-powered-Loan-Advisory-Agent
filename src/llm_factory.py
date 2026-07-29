@@ -101,7 +101,7 @@ def get_llm(
     Supported providers: 'ollama', 'openai', 'bedrock'.
     """
     default_provider = os.getenv("LLM_PROVIDER", "ollama")
-    default_model = os.getenv("LLM_MODEL", "qwen2.5-coder:7b")
+    default_model = os.getenv("LLM_MODEL", "gemma4:12b")
     default_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
     selected_provider = (provider or os.getenv("LLM_PROVIDER") or default_provider).lower()
@@ -124,7 +124,15 @@ def get_llm(
                 "langchain-openai is required for OpenAI provider. Install it using `pip install langchain-openai`."
             ) from e
 
-        key = api_key or os.getenv("OPENAI_API_KEY", "")
+        key = api_key or os.getenv("OPENAI_API_KEY")
+        if not key:
+            url = base_url or os.getenv("OLLAMA_BASE_URL") or default_base_url
+            try:
+                from langchain_ollama import ChatOllama
+                return ChatOllama(model=default_model, base_url=url, temperature=temperature, **kwargs)
+            except Exception:
+                key = "sk-placeholder-key"
+
         url = base_url or os.getenv("OPENAI_BASE_URL") or None
         return ChatOpenAI(
             model=selected_model,

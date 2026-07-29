@@ -16,3 +16,4 @@ PyJWT==2.10.1
 bcrypt==4.2.1
 pandas==2.2.3
 requests==2.32.3
+langchain-ollama==0.2.2

@@ -143,6 +143,7 @@ def planner_node(state: AgentState):
         "calc_params": calc_params,
         "applicant_id": plan_obj.applicant_id,
         "retry_count": 0,
+        "constraint_retry_count": 0,
     }
 
 
@@ -265,7 +266,8 @@ CRITIC_PROMPT = append_reasoning_rules(CRITIC_PROMPT)
 
 @trace_node("critic_node")
 def critic_node(state: AgentState):
-    if not state.get("needs_research"):
+    evidence_text = (state.get("research_evidence", "") or "").strip()
+    if not state.get("needs_research") or not evidence_text or "No relevant policy documents" in evidence_text:
         return {"critic_verdict": "sufficient"}
 
     prompt = CRITIC_PROMPT.format(
@@ -478,8 +480,13 @@ CONSTRAINT_CHECKER_PROMPT = append_reasoning_rules(CONSTRAINT_CHECKER_PROMPT)
 def constraint_checker_node(state: AgentState):
     constraints = state.get("user_constraints", [])
     if not constraints:
-        return {"constraint_feedback": ""}
+        return {"constraint_feedback": "", "constraint_retry_count": 0}
         
+    current_retry = state.get("constraint_retry_count", 0)
+    if current_retry >= MAX_RETRIES:
+        # Max retries reached, stop feedback loop and proceed forward
+        return {"constraint_feedback": "", "constraint_retry_count": 0}
+
     prompt = CONSTRAINT_CHECKER_PROMPT.format(
         constraints=json.dumps(constraints, indent=2),
         draft=state.get("draft_response", "")
@@ -497,8 +504,11 @@ def constraint_checker_node(state: AgentState):
     val_obj = validate_llm_json(raw_response, ConstraintCheckOutput, default_obj)
     
     if val_obj.violated:
-        return {"constraint_feedback": val_obj.feedback}
-    return {"constraint_feedback": ""}
+        return {
+            "constraint_feedback": val_obj.feedback,
+            "constraint_retry_count": current_retry + 1,
+        }
+    return {"constraint_feedback": "", "constraint_retry_count": 0}
 
 def route_after_constraint_check(state: AgentState):
     return "synthesizer" if state.get("constraint_feedback") else "hallucination_guard"
@@ -532,20 +542,25 @@ HALLUCINATION_GUARD_PROMPT = append_reasoning_rules(HALLUCINATION_GUARD_PROMPT)
 
 @trace_node("hallucination_guard_node")
 def hallucination_guard_node(state: AgentState):
+    draft = state.get("draft_response", "")
+    evidence = (state.get("research_evidence", "") or "").strip()
+    if not state.get("needs_research") or not evidence or "No relevant policy documents" in evidence or not draft:
+        return {"draft_response": draft}
+
     prompt = HALLUCINATION_GUARD_PROMPT.format(
         profile=json.dumps(state.get("user_profile", {})),
         evidence=state.get("research_evidence", "None"),
         calculation=state.get("calculation_result", "None"),
         credit=state.get("credit_result", "None"),
         constraints=json.dumps(state.get("user_constraints", [])),
-        draft=state.get("draft_response", "")
+        draft=draft
     )
     llm = _get_llm_for_state(state)
     
     response_text = invoke_llm_with_resilience(
         llm=llm,
         messages=[SystemMessage(content=prompt)],
-        fallback_response=state.get("draft_response", "")
+        fallback_response=draft
     )
     
     return {"draft_response": response_text}

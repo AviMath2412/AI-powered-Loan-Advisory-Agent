@@ -1,3 +1,4 @@
+import uuid
 import pytest
 from unittest.mock import patch, MagicMock
 from langchain_core.messages import HumanMessage, AIMessage
@@ -40,7 +41,8 @@ def base_state():
 
 def run_agent(state: dict, user_msg: str):
     state["messages"].append(HumanMessage(content=user_msg))
-    final_state = app.invoke(state, config={"configurable": {"thread_id": "test_thread"}})
+    thread_id = f"test_thread_{uuid.uuid4().hex}"
+    final_state = app.invoke(state, config={"configurable": {"thread_id": thread_id}})
     return final_state
 
 # 1. Contradictory Profile

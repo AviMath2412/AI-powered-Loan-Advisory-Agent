@@ -1,3 +1,4 @@
+import uuid
 import pytest
 from langchain_core.messages import HumanMessage
 from src.agent.pipeline_graph import app
@@ -11,7 +12,8 @@ def test_pipeline_refactor_execution():
     }
     
     # Execute the graph
-    result = app.invoke(state, config={"configurable": {"thread_id": "test_pipeline"}})
+    thread_id = f"test_pipeline_{uuid.uuid4().hex}"
+    result = app.invoke(state, config={"configurable": {"thread_id": thread_id}})
     
     # Assert nodes ran and populated the strictly typed Pydantic state fields
     assert "messages" in result
