@@ -1,4 +1,3 @@
-from IPython.core import logger
 import os
 import sys
 import json
@@ -48,7 +47,7 @@ agent_logger = get_logger("AgentLogger")
 
 @dataclass
 class TraceSpan:
-    trace_id: str
+    trace_id: Optional[str]
     span_id: str
     name: str
     start_time: float
@@ -174,7 +173,7 @@ class MetricsExporter:
         # Alert mechanism
         total_cost = sum(usage.get("estimated_cost_usd", 0) for usage in self.token_usage.values())
         if total_cost > self.cost_threshold_usd:
-            logger.warning(f"🚨 ALERT: LLM API Cost has exceeded the threshold! Current cost: ${total_cost:.4f}")
+            agent_logger.warning(f"🚨 ALERT: LLM API Cost has exceeded the threshold! Current cost: ${total_cost:.4f}")
 
     def get_summary(self) -> Dict[str, Any]:
         latency_summary = {}
