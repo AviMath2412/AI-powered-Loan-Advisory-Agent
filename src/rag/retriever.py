@@ -69,12 +69,9 @@ def retrieve_loan_context(query: str) -> str:
     try:
         retriever = get_retriever()
         
-        # Simulate multiple sources by doing semantic search and returning dummy BM25 list for fusion
-        # In a real system, you would have a BM25Retriever or second VectorDB.
+        # Single semantic search — fast and accurate
         semantic_docs = retriever.invoke(query)
-        keyword_docs = retriever.invoke(query.split()[0]) if query.split() else semantic_docs
-        
-        fused_results = reciprocal_rank_fusion(semantic_docs, keyword_docs)
+        fused_results = [(doc, 1.0 / (60 + rank)) for rank, doc in enumerate(semantic_docs, start=1)]
         
         if not fused_results:
             return "No relevant policy documents found in the database."

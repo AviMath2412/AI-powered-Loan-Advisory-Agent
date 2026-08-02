@@ -4,7 +4,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 import uuid
 import pandas as pd
 import streamlit as st
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from src.agent.graph import app
 from src.agent.tools import compute_amortization_schedule
 from src.memory import list_thread_ids, delete_thread
@@ -372,6 +372,10 @@ if prompt:
             st.caption("⚡ *Served instantly from Response Cache (< 0.05s)*")
             st.markdown(cached_entry["response_content"])
             st.session_state.messages.append(AIMessage(content=cached_entry["response_content"]))
+            full_state = {
+                "messages": st.session_state.messages,
+                "user_profile": st.session_state.get("user_profile", {})
+            }
         else:
             status_box = st.status("Agent is working...", expanded=True)
             try:

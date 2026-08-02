@@ -175,30 +175,8 @@ def researcher_node(state: AgentState):
     evidence = ""
     if state.get("needs_research"):
         try:
-            raw_evidence = retrieve_loan_context(state["search_query"])
-            if raw_evidence and "No relevant policy documents" not in raw_evidence:
-                prompt = POLICY_CLASSIFIER_PROMPT.format(evidence=raw_evidence)
-                llm = _get_llm_for_state(state)
-                
-                fallback = json.dumps({"policies": []})
-                response_text = invoke_llm_with_resilience(
-                    llm=llm,
-                    messages=[SystemMessage(content=prompt)],
-                    fallback_response=fallback
-                )
-                
-                default_obj = ClassifiedEvidence(policies=[])
-                val_obj = validate_llm_json(response_text, ClassifiedEvidence, default_obj)
-                
-                # Format back into structured text that subsequent nodes can easily read
-                if val_obj.policies:
-                    evidence = raw_evidence + "\n\nClassified Policy Statements:\n"
-                    for p in val_obj.policies:
-                        evidence += f"- [{p.type.upper()}] {p.statement}\n"
-                else:
-                    evidence = raw_evidence
-            else:
-                evidence = raw_evidence
+            # Directly use retrieved evidence — no extra LLM classification call
+            evidence = retrieve_loan_context(state["search_query"])
         except Exception as e:
             evidence = f"[Notice: Research search unavailable - {e}]"
 
@@ -591,18 +569,8 @@ workflow.set_entry_point("planner")
 workflow.add_edge("planner", "researcher")
 workflow.add_edge("researcher", "calculator")
 workflow.add_edge("calculator", "credit")
-workflow.add_edge("credit", "critic")
-workflow.add_conditional_edges("critic", route_after_critic, {
-    "researcher": "researcher",
-    "validator": "validator",
-})
-workflow.add_edge("validator", "synthesizer")
-workflow.add_edge("synthesizer", "constraint_checker")
-workflow.add_conditional_edges("constraint_checker", route_after_constraint_check, {
-    "synthesizer": "synthesizer",
-    "hallucination_guard": "hallucination_guard",
-})
-workflow.add_edge("hallucination_guard", "commit")
+workflow.add_edge("credit", "synthesizer")
+workflow.add_edge("synthesizer", "commit")
 workflow.add_edge("commit", END)
 
 app = workflow.compile(checkpointer=get_checkpointer())
