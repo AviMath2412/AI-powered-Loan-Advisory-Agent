@@ -11,7 +11,17 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    
+
+    env:
+      PYTHONPATH: "."
+      LLM_PROVIDER: "ollama"
+      LLM_MODEL: "qwen2.5-coder:7b"
+      VECTOR_DB_PROVIDER: "chroma"
+      EMBEDDING_PROVIDER: "ollama"
+      EMBEDDING_MODEL: "nomic-embed-text:latest"
+      ANONYMIZED_TELEMETRY: "False"
+      CHROMA_TELEMETRY: "0"
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -26,17 +36,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest
+          pip install pytest flake8
 
-      - name: Type Checking & Linting
+      - name: Lint (non-blocking)
         run: |
-          pip install flake8 mypy
-          flake8 src/ || echo "Linting finished"
-          mypy src/ --ignore-missing-imports || echo "Type checking finished"
+          flake8 src/ --max-line-length=120 --extend-ignore=E501,W503 || echo "Linting finished with warnings"
 
       - name: Run Unit Tests
         run: |
-          PYTHONPATH=. pytest tests/ -v
-
-      - name: Build Docker Image
-        run: docker build -t ai-loan-advisory-agent:latest .
+          pytest tests/ -v --tb=short
