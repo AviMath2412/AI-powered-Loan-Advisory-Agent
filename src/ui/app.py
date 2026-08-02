@@ -34,7 +34,8 @@ importlib.reload(graph_module)
 app = graph_module.app
 
 LLM_PROVIDER = getattr(config, "LLM_PROVIDER", os.getenv("LLM_PROVIDER", "ollama"))
-LLM_MODEL = getattr(config, "LLM_MODEL", os.getenv("LLM_MODEL", "gemma4:12b"))
+LLM_MODEL = getattr(config, "LLM_MODEL", os.getenv("LLM_MODEL", "qwen2.5-coder:7b"))
+from src.cache import response_cache
 
 st.set_page_config(
     page_title="AI Loan Advisory Agent",
@@ -149,8 +150,8 @@ with st.sidebar:
     prov_idx = provider_options.index(LLM_PROVIDER.lower()) if LLM_PROVIDER.lower() in provider_options else 0
     selected_provider = st.selectbox("LLM Provider", provider_options, index=prov_idx, key="provider_select")
 
-    model_presets = ["gemma4:12b", "qwen2.5-coder:7b", "gemma4:31b-cloud", "gpt-4o-mini", "Custom..."]
-    curr_model = LLM_MODEL if LLM_MODEL in model_presets else "gemma4:12b"
+    model_presets = ["qwen2.5-coder:7b", "gemma4:12b", "gemma4:31b-cloud", "gpt-4o-mini", "Custom..."]
+    curr_model = LLM_MODEL if LLM_MODEL in model_presets else "qwen2.5-coder:7b"
     model_idx = model_presets.index(curr_model) if curr_model in model_presets else 0
     selected_model_choice = st.selectbox("LLM Model", model_presets, index=model_idx, key="model_choice_select")
     
@@ -161,6 +162,10 @@ with st.sidebar:
 
     st.session_state.selected_provider = selected_provider
     st.session_state.selected_model = selected_model
+
+    if st.button("⚡ Clear Query Cache", use_container_width=True, help="Clear saved query responses"):
+        response_cache.clear()
+        st.toast("Query response cache cleared!")
 
     st.divider()
 
@@ -352,42 +357,61 @@ if prompt:
         input_state["uploaded_doc_name"] = ""
 
     with st.chat_message("assistant"):
-        status_box = st.status("Agent is working...", expanded=True)
-        try:
-            # We track whether calculation/credit steps are needed from the planner node's output
-            needs_calc = False
-            needs_credit = False
-            for update in app.stream(
-                input_state,
-                config=config,
-                stream_mode="updates",
-            ):
-                for node_name, values in update.items():
-                    if node_name == "planner":
-                        needs_calc = bool(values.get("needs_calculation", False))
-                        needs_credit = bool(values.get("needs_credit_check", False))
-                    
-                    # Conditionally skip displaying calculation/credit nodes if not needed
-                    if node_name == "calculator" and not needs_calc:
-                        continue
-                    if node_name == "credit" and not needs_credit:
-                        continue
-                    
-                    status_box.write(NODE_LABELS.get(node_name, node_name))
-        except Exception as e:
-            status_box.update(label="Error", state="error")
-            st.error(
-                f"Agent error: {e}\n\n"
-                "If this is a connection error, make sure Ollama is running "
-                "(`ollama serve`) and the required models are pulled."
-            )
-            st.stop()
+        current_prov = st.session_state.get("selected_provider", LLM_PROVIDER)
+        current_mdl = st.session_state.get("selected_model", LLM_MODEL)
+        cache_key = response_cache.generate_key(
+            prompt=prompt,
+            model=current_mdl,
+            provider=current_prov,
+            uploaded_doc_text=st.session_state.get("uploaded_doc_text", ""),
+            user_profile=st.session_state.get("user_profile", {}),
+        )
+        cached_entry = response_cache.get(cache_key)
 
-        status_box.update(label="Done", state="complete", expanded=False)
+        if cached_entry:
+            st.caption("⚡ *Served instantly from Response Cache (< 0.05s)*")
+            st.markdown(cached_entry["response_content"])
+            st.session_state.messages.append(AIMessage(content=cached_entry["response_content"]))
+        else:
+            status_box = st.status("Agent is working...", expanded=True)
+            try:
+                # We track whether calculation/credit steps are needed from the planner node's output
+                needs_calc = False
+                needs_credit = False
+                for update in app.stream(
+                    input_state,
+                    config=config,
+                    stream_mode="updates",
+                ):
+                    for node_name, values in update.items():
+                        if node_name == "planner":
+                            needs_calc = bool(values.get("needs_calculation", False))
+                            needs_credit = bool(values.get("needs_credit_check", False))
+                        
+                        # Conditionally skip displaying calculation/credit nodes if not needed
+                        if node_name == "calculator" and not needs_calc:
+                            continue
+                        if node_name == "credit" and not needs_credit:
+                            continue
+                        
+                        status_box.write(NODE_LABELS.get(node_name, node_name))
+            except Exception as e:
+                status_box.update(label="Error", state="error")
+                st.error(
+                    f"Agent error: {e}\n\n"
+                    "If this is a connection error, make sure Ollama is running "
+                    "(`ollama serve`) and the required models are pulled."
+                )
+                st.stop()
 
-        full_state = app.get_state(config).values
-        final_response = full_state["messages"][-1]
-        st.markdown(final_response.content)
+            status_box.update(label="Done", state="complete", expanded=False)
+
+            full_state = app.get_state(config).values
+            final_response = full_state["messages"][-1]
+            st.markdown(final_response.content)
+
+            # Store response in persistent cache
+            response_cache.set(cache_key, {"response_content": final_response.content})
 
         # Live agent trace, replacing the old post-hoc "thought process" expander
         with st.expander("View Agent Trace & Observability", expanded=False):
