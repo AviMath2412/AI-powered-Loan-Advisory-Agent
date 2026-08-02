@@ -52,8 +52,8 @@ def missing_information_detection(state: PipelineState):
 def confidence_estimation(state: PipelineState):
     return {"confidence": ConfidenceData(score=0.9, reasoning="Good info")}
 
-@trace_node("policy_validation")
-def policy_validation(state: PipelineState):
+@trace_node("policy_validator")
+def policy_validator(state: PipelineState):
     return {"policy_validation": PolicyValidationData(hard_requirements_met=True, violations=[])}
 
 @trace_node("reasoning_agent")
@@ -88,7 +88,7 @@ workflow.add_node("document_retrieval", document_retrieval)
 workflow.add_node("conflict_detection", conflict_detection)
 workflow.add_node("missing_information_detection", missing_information_detection)
 workflow.add_node("confidence_estimation", confidence_estimation)
-workflow.add_node("policy_validation", policy_validation)
+workflow.add_node("policy_validator", policy_validator)
 workflow.add_node("reasoning_agent", reasoning_agent)
 workflow.add_node("grounding_verification", grounding_verification)
 workflow.add_node("response_formatter", response_formatter)
@@ -101,8 +101,8 @@ workflow.add_edge("memory_retrieval", "document_retrieval")
 workflow.add_edge("document_retrieval", "conflict_detection")
 workflow.add_edge("conflict_detection", "missing_information_detection")
 workflow.add_edge("missing_information_detection", "confidence_estimation")
-workflow.add_edge("confidence_estimation", "policy_validation")
-workflow.add_edge("policy_validation", "reasoning_agent")
+workflow.add_edge("confidence_estimation", "policy_validator")
+workflow.add_edge("policy_validator", "reasoning_agent")
 workflow.add_edge("reasoning_agent", "grounding_verification")
 workflow.add_edge("grounding_verification", "response_formatter")
 workflow.add_edge("response_formatter", "final_response")
